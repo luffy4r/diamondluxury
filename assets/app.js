@@ -6,8 +6,15 @@
 
 const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? '' : 'https://dlback.onrender.com';
 
+const IMG_FAVICON = 'https://ik.imagekit.io/diamondluxury/IMG_7659.jpeg?updatedAt=1795273467452';
+const IMG_LOGO_FULL = 'https://ik.imagekit.io/diamondluxury/IMG_7657.jpeg?updatedAt=1795273315148';
+const IMG_LOGO_MARK = 'https://ik.imagekit.io/diamondluxury/55f3c57d-84e5-4dcf-afd9-0db725d48fd0.webp?updatedAt=1795273627679';
+
 function assetUrl(src) {
   if (!src || typeof src !== 'string') return src;
+  if (/assets\/(favicon\.svg|logo-full\.svg|logo-mark\.svg)$/.test(src)) {
+    return src.includes('favicon.svg') ? IMG_FAVICON : src.includes('logo-mark.svg') ? IMG_LOGO_MARK : IMG_LOGO_FULL;
+  }
   if (src.startsWith('data:') || /^https?:\/\//i.test(src)) return src;
   return src.startsWith('/') ? API_BASE + src : src;
 }
@@ -283,7 +290,8 @@ function renderChrome() {
   $('#year').textContent = new Date().getFullYear();
 
   const hero = $('#heroImage');
-  if (hero) hero.src = settings.heroImage || (state.products[0] && state.products[0].images[0]) || '/assets/logo-full.svg';
+  const customHero = settings.heroImage && !/^data:image\/svg\+xml/i.test(settings.heroImage);
+  if (hero) hero.src = customHero ? assetUrl(settings.heroImage) : IMG_LOGO_FULL;
   const availability = $('#heroAvailability');
   const total = activeProducts().reduce((sum, product) => sum + product.stock, 0);
   if (availability) availability.textContent = total > 0 ? 'Pièces en stock' : 'En rupture';
@@ -334,14 +342,14 @@ function renderChrome() {
 
   if ($('#storyImage') && state.products.length) {
     const pick = state.products.find((product) => product.categoryId === 'cat_robes') || state.products[0];
-    $('#storyImage').src = (pick.images && pick.images[0]) || '/assets/logo-full.svg';
+    $('#storyImage').src = (pick.images && pick.images[0]) || IMG_LOGO_FULL;
   }
 
   if ($('#editorialMain')) {
     const first = state.products.find((product) => product.categoryId === 'cat_robes') || state.products[0];
     const second = state.products.find((product) => product.categoryId === 'cat_bijoux') || state.products[1];
-    if (first) $('#editorialMain').src = first.images[0] || '/assets/logo-full.svg';
-    if (second) $('#editorialSmall').src = second.images[0] || '/assets/logo-full.svg';
+    if (first) $('#editorialMain').src = first.images[0] || IMG_LOGO_FULL;
+    if (second) $('#editorialSmall').src = second.images[0] || IMG_LOGO_FULL;
   }
 
   updateBadges();
@@ -378,7 +386,7 @@ function productCard(product) {
   return '<article class="product-card">' +
     '<div class="product-media">' +
       '<a href="' + productUrl(product) + '" aria-label="Voir ' + esc(product.name) + '">' +
-        '<img class="product-img" src="' + esc(product.images[0] || '/assets/logo-full.svg') + '" alt="' + esc(product.name) + '" loading="lazy">' +
+        '<img class="product-img" src="' + esc(product.images[0] || IMG_LOGO_FULL) + '" alt="' + esc(product.name) + '" loading="lazy">' +
         (secondImage ? '<img class="product-img alt" src="' + esc(secondImage) + '" alt="" loading="lazy" aria-hidden="true">' : '') +
       '</a>' +
       '<div class="product-badges">' + badges.join('') + (product.stock === 0 ? '<span class="badge out">En rupture</span>' : '') + '</div>' +
@@ -408,7 +416,7 @@ function renderHome() {
   const cats = state.categories;
   $('#homeCategories').innerHTML = cats.map((category, index) =>
     '<a class="cat-card reveal' + (index % 3 === 1 ? ' d1' : index % 3 === 2 ? ' d2' : '') + '" href="#/boutique?cat=' + encodeURIComponent(category.slug) + '">' +
-      '<img src="' + esc(category.image || '/assets/logo-full.svg') + '" alt="' + esc(category.name) + '" loading="lazy">' +
+      '<img src="' + esc(category.image || IMG_LOGO_FULL) + '" alt="' + esc(category.name) + '" loading="lazy">' +
       '<div class="cat-overlay">' +
         '<div class="cat-name">' + esc(category.name) + '</div>' +
         '<div class="cat-count">' + (category.productCount || 0) + ' pièce' + ((category.productCount || 0) > 1 ? 's' : '') + '</div>' +
@@ -609,7 +617,7 @@ function renderProduct(slug) {
             '<img src="' + esc(image) + '" alt="' + esc(product.name) + ' — vue ' + (index + 1) + '"></button>'
         ).join('') + '</div>' +
         '<div class="gallery-main">' +
-          '<img id="galleryMain" src="' + esc(product.images[0] || '/assets/logo-full.svg') + '" alt="' + esc(product.name) + '">' +
+          '<img id="galleryMain" src="' + esc(product.images[0] || IMG_LOGO_FULL) + '" alt="' + esc(product.name) + '">' +
           ((product.images || []).length > 1 ? '<div class="gallery-nav">' +
             '<button data-gallery="prev" aria-label="Image précédente"><svg class="icon"><use href="#i-chevron-left"></use></svg></button>' +
             '<button data-gallery="next" aria-label="Image suivante"><svg class="icon"><use href="#i-chevron-right"></use></svg></button>' +
@@ -916,7 +924,7 @@ function renderCart() {
 
   container.innerHTML = lines.map((line, index) =>
     '<div class="cart-item">' +
-      '<a class="cart-thumb" href="' + productUrl(line.product) + '"><img src="' + esc(line.product.images[0] || '/assets/logo-full.svg') + '" alt="' + esc(line.product.name) + '"></a>' +
+      '<a class="cart-thumb" href="' + productUrl(line.product) + '"><img src="' + esc(line.product.images[0] || IMG_LOGO_FULL) + '" alt="' + esc(line.product.name) + '"></a>' +
       '<div>' +
         '<div class="cart-item-top">' +
           '<div>' +

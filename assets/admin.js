@@ -7,8 +7,15 @@
 const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? '' : 'https://dlback.onrender.com';
 const API_CREDENTIALS = API_BASE ? 'include' : 'same-origin';
 
+const IMG_FAVICON = 'https://ik.imagekit.io/diamondluxury/IMG_7659.jpeg?updatedAt=1795273467452';
+const IMG_LOGO_FULL = 'https://ik.imagekit.io/diamondluxury/IMG_7657.jpeg?updatedAt=1795273315148';
+const IMG_LOGO_MARK = 'https://ik.imagekit.io/diamondluxury/55f3c57d-84e5-4dcf-afd9-0db725d48fd0.webp?updatedAt=1795273627679';
+
 function assetUrl(src) {
   if (!src || typeof src !== 'string') return src;
+  if (/assets\/(favicon\.svg|logo-full\.svg|logo-mark\.svg)$/.test(src)) {
+    return src.includes('favicon.svg') ? IMG_FAVICON : src.includes('logo-mark.svg') ? IMG_LOGO_MARK : IMG_LOGO_FULL;
+  }
   if (src.startsWith('data:') || /^https?:\/\//i.test(src)) return src;
   return src.startsWith('/') ? API_BASE + src : src;
 }
@@ -418,7 +425,7 @@ function renderDashboard() {
           '<div class="panel-body">' +
             (alerts.length
               ? '<div class="alert-list">' + alerts.map((product) =>
-                  '<div class="alert-row"><img src="' + esc(assetUrl(product.images[0] || '/assets/logo-full.svg')) + '" alt="">' +
+                  '<div class="alert-row"><img src="' + esc(assetUrl(product.images[0] || IMG_LOGO_FULL)) + '" alt="">' +
                   '<div class="alert-info"><strong>' + esc(product.name) + '</strong><small>' + stockBadge(product.stock).replace(/<\/?span[^>]*>/g, '') + ' · ' + esc(categoryName(product.categoryId)) + '</small></div>' +
                   '<button class="btn btn-outline" data-edit-product="' + esc(product.id) + '">Gérer</button></div>'
                 ).join('') + '</div>'
@@ -486,7 +493,7 @@ function renderProducts() {
         ? '<table class="data-table"><thead><tr><th>Article</th><th>Catégorie</th><th>Prix</th><th>Stock</th><th>Variantes</th><th>En ligne</th><th></th></tr></thead><tbody>' +
           products.map((product) =>
             '<tr>' +
-              '<td><div class="table-product"><img src="' + esc(assetUrl(product.images[0] || '/assets/logo-full.svg')) + '" alt=""><div><strong>' + esc(product.name) + '</strong><small>' + (product.comparePrice > product.price ? '<span style="color:var(--red)">Promo</span> · ' : '') + (product.featured ? 'Signature' : 'Réf. ' + esc(product.id.slice(-6))) + '</small></div></div></td>' +
+              '<td><div class="table-product"><img src="' + esc(assetUrl(product.images[0] || IMG_LOGO_FULL)) + '" alt=""><div><strong>' + esc(product.name) + '</strong><small>' + (product.comparePrice > product.price ? '<span style="color:var(--red)">Promo</span> · ' : '') + (product.featured ? 'Signature' : 'Réf. ' + esc(product.id.slice(-6))) + '</small></div></div></td>' +
               '<td class="table-muted">' + esc(categoryName(product.categoryId)) + '</td>' +
               '<td class="table-nowrap">' + money(product.price) + (product.comparePrice > product.price ? '<br><small class="table-muted" style="text-decoration:line-through">' + money(product.comparePrice) + '</small>' : '') + '</td>' +
               '<td>' + stockBadge(product.stock) + '</td>' +
@@ -954,7 +961,7 @@ function renderCategories() {
       ? '<div class="category-admin-grid">' + categories.map((category) => {
           const count = admin.data.products.filter((product) => product.categoryId === category.id).length;
           return '<div class="admin-category-card">' +
-            '<div class="admin-category-media"><img src="' + esc(assetUrl(category.image || '/assets/logo-full.svg')) + '" alt="' + esc(category.name) + '"><span class="cat-order">N° ' + category.order + '</span></div>' +
+            '<div class="admin-category-media"><img src="' + esc(assetUrl(category.image || IMG_LOGO_FULL)) + '" alt="' + esc(category.name) + '"><span class="cat-order">N° ' + category.order + '</span></div>' +
             '<div class="admin-category-body">' +
               '<h3>' + esc(category.name) + '</h3>' +
               '<p>' + esc(category.description || 'Aucune description.') + '</p>' +
@@ -986,7 +993,7 @@ function openCategoryForm(id) {
         '<div class="form-section-head"><h3>Visuel de la catégorie</h3></div>' +
         '<div class="upload-zone" id="categoryUpload"><svg class="icon"><use href="#a-image"></use></svg><strong>Cliquez pour choisir une image</strong><small>Format paysage conseillé.</small></div>' +
         '<input type="file" id="categoryImageInput" accept="image/*" hidden>' +
-        '<div class="hero-preview" id="categoryPreview"' + (category && category.image ? '' : ' hidden') + '><img src="' + esc(assetUrl(category && category.image ? category.image : '/assets/logo-full.svg')) + '" alt="Visuel"></div>' +
+        '<div class="hero-preview" id="categoryPreview"' + (category && category.image ? '' : ' hidden') + '><img src="' + esc(assetUrl(category && category.image ? category.image : IMG_LOGO_FULL)) + '" alt="Visuel"></div>' +
       '</div>' +
       '<div class="form-error" id="categoryError"></div>' +
     '</div>' +
@@ -1102,7 +1109,7 @@ function openOrderDetail(id) {
         '<div>' +
           '<div class="detail-label">Articles commandés</div>' +
           order.items.map((item) =>
-            '<div class="order-item"><img src="' + esc(assetUrl(item.image || '/assets/logo-full.svg')) + '" alt="">' +
+            '<div class="order-item"><img src="' + esc(assetUrl(item.image || IMG_LOGO_FULL)) + '" alt="">' +
               '<div class="order-item-info"><strong>' + esc(item.name) + '</strong><small>' + esc(item.color) + ' · ' + esc(item.size) + ' · Qté ' + item.qty + '</small></div>' +
               '<div class="order-item-price">' + money(item.price * item.qty) + '</div>' +
             '</div>'
@@ -1477,7 +1484,7 @@ function renderSettings() {
           '<div class="form-section-head"><h3>Page d’accueil</h3></div>' +
           '<div class="upload-zone" id="heroUpload"><svg class="icon"><use href="#a-image"></use></svg><strong>Remplacer le visuel principal</strong><small>Photo verticale conseillée (4:5).</small></div>' +
           '<input type="file" id="heroInput" accept="image/*" hidden>' +
-          '<div class="hero-preview"><img id="heroPreview" src="' + esc(assetUrl(settings.heroImage || '/assets/logo-full.svg')) + '" alt="Visuel d’accueil"></div>' +
+          '<div class="hero-preview"><img id="heroPreview" src="' + esc(assetUrl(settings.heroImage || IMG_LOGO_FULL)) + '" alt="Visuel d’accueil"></div>' +
         '</div>' +
         '<div class="form-section">' +
           '<div class="form-section-head"><h3>Texte « La Maison »</h3></div>' +
