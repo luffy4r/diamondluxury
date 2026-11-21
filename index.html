@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/main.css?v=10">
+  <link rel="stylesheet" href="assets/main.css?v=11">
 </head>
 <body>
   <a href="#main" class="sr-only">Aller au contenu</a>
@@ -48,7 +48,12 @@
     <symbol id="i-instagram" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="3.8"/><circle cx="17.2" cy="6.9" r=".9" fill="currentColor" stroke="none"/></symbol>
   </svg>
 
-  <div class="announce"><span id="announceText">Livraison · Paiement à la livraison · Pièces limitées</span></div>
+  <div class="announce" role="note" aria-label="Livraison 58 wilayas · Paiement à la livraison · Pièces limitées">
+    <div class="announce-track" aria-hidden="true">
+      <span class="announce-group" id="announceText">LIVRAISON 58 WILAYAS · PAIEMENT À LA LIVRAISON · PIÈCES LIMITÉES</span>
+      <span class="announce-group">LIVRAISON 58 WILAYAS · PAIEMENT À LA LIVRAISON · PIÈCES LIMITÉES</span>
+    </div>
+  </div>
 
   <header class="site-header" id="siteHeader">
     <div class="container header-inner">
@@ -518,7 +523,7 @@
 
   <div class="toast-stack" id="toasts" aria-live="polite"></div>
 
-  <script src="assets/app.js?v=9" defer></script>
+  <script src="assets/app.js?v=10" defer></script>
 </body>
 </html>
 

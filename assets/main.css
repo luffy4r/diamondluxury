@@ -63,25 +63,35 @@ em { font-style: italic; }
 .icon.lg { width: 26px; height: 26px; }
 
 /* ------------------------------ Annonce + Header ------------------------------ */
-.announce { background: var(--ink); color: var(--cream); text-align: center; font-size: 11px; letter-spacing: .18em; text-transform: uppercase; padding: 10px 16px; position: relative; z-index: 51; }
-.announce span { color: var(--gold-soft); }
+.announce { background: var(--gold); color: #000; overflow: hidden; position: relative; z-index: 51; padding: 9px 0; }
+.announce-track { display: flex; width: max-content; animation: announce-marquee 32s linear infinite; will-change: transform; }
+.announce:hover .announce-track { animation-play-state: paused; }
+.announce-group { display: block; flex: 0 0 auto; padding-right: 56px; white-space: nowrap; font-size: 11px; font-weight: 600; letter-spacing: .18em; text-transform: uppercase; color: #000; }
+@keyframes announce-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) { .announce-track { animation: none; } }
 
-.site-header { position: sticky; top: 0; z-index: 50; background: rgba(251,247,240,.92); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); transition: box-shadow .2s; }
-.site-header.scrolled { box-shadow: var(--shadow); }
-.header-inner { display: flex; align-items: center; justify-content: space-between; gap: 20px; height: 72px; }
-.brand { display: flex; align-items: center; font-family: var(--serif); font-size: 22px; letter-spacing: .04em; }
-.brand img { height: 34px; width: auto; }
-.main-nav { display: flex; gap: 28px; }
-.nav-link { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-2); position: relative; padding: 6px 0; }
-.nav-link:hover { color: var(--gold-deep); }
-.nav-link.active::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: var(--gold); }
-.header-actions { display: flex; gap: 12px; align-items: center; }
+.site-header { position: sticky; top: 0; z-index: 50; background: #0a0a0a; border-bottom: 1px solid rgba(201,162,39,.45); transition: box-shadow .2s; }
+.site-header.scrolled { box-shadow: 0 6px 24px rgba(0,0,0,.35); }
+.header-inner { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; height: 76px; }
+
+.site-header .main-nav { grid-column: 1; grid-row: 1; justify-self: start; display: flex; gap: 24px; }
+.site-header .nav-link { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: #fff; position: relative; padding: 6px 0; transition: color .18s; }
+.site-header .nav-link:hover { color: var(--gold); }
+.site-header .nav-link.active { color: var(--gold); }
+.site-header .nav-link.active::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: var(--gold); }
+
+.site-header .brand { grid-column: 2; grid-row: 1; justify-self: center; display: flex; align-items: center; }
+.site-header .brand img { width: 168px; height: 54px; object-fit: cover; object-position: center; filter: drop-shadow(0 1px 8px rgba(201,162,39,.18)); }
+
+.site-header .header-actions { grid-column: 3; grid-row: 1; justify-self: end; display: flex; gap: 16px; align-items: center; }
+.site-header .icon-btn { position: relative; width: auto; height: auto; padding: 6px; display: inline-flex; align-items: center; justify-content: center; border: 0; background: transparent; color: #fff; cursor: pointer; transition: color .18s, transform .18s; }
+.site-header .icon-btn:hover { color: var(--gold); background: transparent; transform: translateY(-1px); }
+.site-header .burger { grid-column: 1; grid-row: 1; justify-self: start; display: none; }
+.badge-count { position: absolute; top: -2px; right: -4px; background: var(--gold); color: #000; font-size: 10px; font-weight: 700; min-width: 16px; height: 16px; border-radius: 8px; display: flex; align-items: center; justify-content: center; padding: 0 4px; line-height: 1; }
+.badge-count.gold { background: var(--gold); color: #000; }
 
 .icon-btn { position: relative; width: 38px; height: 38px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line); background: var(--paper); color: var(--ink); cursor: pointer; transition: all .18s; }
 .icon-btn:hover { background: var(--cream-2); color: var(--gold-deep); border-color: var(--gold); }
-.burger { display: none; }
-.badge-count { position: absolute; top: -6px; right: -6px; background: var(--gold); color: #fff; font-size: 10px; min-width: 16px; height: 16px; border-radius: 8px; display: flex; align-items: center; justify-content: center; padding: 0 4px; line-height: 1; }
-.badge-count.gold { background: var(--gold-deep); }
 
 /* ------------------------------ Boutons ------------------------------ */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 22px; font-size: 11px; letter-spacing: .16em; text-transform: uppercase; border: 1px solid transparent; cursor: pointer; transition: all .2s ease; font-weight: 500; font-family: inherit; background: none; color: inherit; }
@@ -462,8 +472,9 @@ input.invalid { border-color: var(--red) !important; background: #fef2f2; }
 }
 
 @media (max-width: 900px) {
-  .main-nav { display: none; }
-  .burger { display: inline-flex; }
+  .site-header .main-nav { display: none; }
+  .site-header .burger { display: inline-flex; }
+  .site-header .brand img { width: 148px; height: 48px; }
   .hero { padding: 40px 0; }
   .hero-inner, .editorial, .story, .contact-layout, .newsletter-inner, .product-page { grid-template-columns: 1fr; gap: 36px; }
   .hero-title { font-size: 46px; }
@@ -488,6 +499,9 @@ input.invalid { border-color: var(--red) !important; background: #fef2f2; }
 
 @media (max-width: 520px) {
   .container { padding: 0 16px; }
+  .header-inner { height: 66px; }
+  .site-header .brand img { width: 130px; height: 42px; }
+  .site-header .header-actions { gap: 12px; }
   .hero-title { font-size: 38px; }
   .hero-proof { gap: 24px; }
   .cat-grid, .values-grid, .form-grid, .footer-grid, .delivery-modes { grid-template-columns: 1fr; }

@@ -286,7 +286,9 @@ function sanitizeCart() {
 
 function renderChrome() {
   const settings = state.settings;
-  $('#announceText').textContent = settings.announcement || 'Livraison · Paiement à la livraison · Pièces limitées';
+  const announcement = settings.announcement || 'LIVRAISON 58 WILAYAS · PAIEMENT À LA LIVRAISON · PIÈCES LIMITÉES';
+  const announceLine = Array(3).fill(announcement).join(' · ');
+  $$('.announce-group').forEach((node) => { node.textContent = announceLine; });
   $('#year').textContent = new Date().getFullYear();
 
   const hero = $('#heroImage');
