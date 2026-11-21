@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 100" role="img" aria-labelledby="t">
+  <title id="t">Diamond Luxury</title>
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7a5b14"/>
+      <stop offset="0.3" stop-color="#c9a227"/>
+      <stop offset="0.5" stop-color="#f8e9b0"/>
+      <stop offset="0.72" stop-color="#b8912e"/>
+      <stop offset="1" stop-color="#e9cf84"/>
+    </linearGradient>
+  </defs>
+  <g fill="none" stroke="url(#g)" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M48 11 L79 20 L90 46 L48 90 L6 46 L17 20 Z"/>
+    <path d="M17 31 H79"/>
+    <path d="M17 20 L31 31 L48 11"/>
+    <path d="M79 20 L65 31 L48 11"/>
+    <path d="M6 46 L31 31 M90 46 L65 31"/>
+    <path d="M31 31 L48 90 M65 31 L48 90"/>
+    <path d="M6 46 L48 90 L90 46"/>
+  </g>
+  <text x="112" y="38" font-family="Georgia, 'Times New Roman', serif" font-size="12.5" letter-spacing="7.5" fill="#a9853a">DIAMOND</text>
+  <text x="108" y="79" font-family="Georgia, 'Times New Roman', serif" font-size="37" letter-spacing="5" fill="url(#g)">LUXURY</text>
+</svg>
