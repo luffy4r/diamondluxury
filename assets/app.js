@@ -4,6 +4,14 @@
    DIAMOND LUXURY — Application vitrine
    ========================================================================== */
 
+const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? '' : 'https://dlback.onrender.com';
+
+function assetUrl(src) {
+  if (!src || typeof src !== 'string') return src;
+  if (src.startsWith('data:') || /^https?:\/\//i.test(src)) return src;
+  return src.startsWith('/') ? API_BASE + src : src;
+}
+
 const $ = (selector, scope = document) => scope.querySelector(selector);
 const $$ = (selector, scope = document) => Array.from(scope.querySelectorAll(selector));
 
@@ -126,7 +134,7 @@ async function copyText(value) {
 
 async function loadShippingWilayas() {
   try {
-    const response = await fetch('/api/shipping/wilayas', { headers: { Accept: 'application/json' } });
+    const response = await fetch(API_BASE + '/api/shipping/wilayas', { headers: { Accept: 'application/json' } });
     if (!response.ok) return;
     const data = await response.json();
     state.shipping.wilayas = data.wilayas || [];
@@ -137,7 +145,7 @@ async function loadShippingWilayas() {
 async function shippingCommunes(wilayaId) {
   const key = String(wilayaId);
   if (state.shipping.communes.has(key)) return state.shipping.communes.get(key);
-  const response = await fetch('/api/shipping/communes?wilaya=' + encodeURIComponent(wilayaId), { headers: { Accept: 'application/json' } });
+  const response = await fetch(API_BASE + '/api/shipping/communes?wilaya=' + encodeURIComponent(wilayaId), { headers: { Accept: 'application/json' } });
   if (!response.ok) throw new Error('Impossible de charger les communes.');
   const data = await response.json();
   state.shipping.communes.set(key, data.communes || []);
@@ -147,7 +155,7 @@ async function shippingCommunes(wilayaId) {
 async function shippingStopDesks(communeId) {
   const key = String(communeId);
   if (state.shipping.stopdesks.has(key)) return state.shipping.stopdesks.get(key);
-  const response = await fetch('/api/shipping/stopdesks?commune=' + encodeURIComponent(communeId), { headers: { Accept: 'application/json' } });
+  const response = await fetch(API_BASE + '/api/shipping/stopdesks?commune=' + encodeURIComponent(communeId), { headers: { Accept: 'application/json' } });
   if (!response.ok) throw new Error('Impossible de charger les bureaux stop-desk.');
   const data = await response.json();
   const payload = { items: data.stopdesks || [], source: data.source, message: data.message || '' };
@@ -159,7 +167,7 @@ async function shippingQuote(wilayaId, communeId, mode, subtotal) {
   const key = [wilayaId, communeId, mode, subtotal].join(':');
   if (state.shipping.quotes.has(key)) return state.shipping.quotes.get(key);
   const query = new URLSearchParams({ wilaya: wilayaId, commune: communeId, mode, subtotal: subtotal || 0 });
-  const response = await fetch('/api/shipping/quote?' + query.toString(), { headers: { Accept: 'application/json' } });
+  const response = await fetch(API_BASE + '/api/shipping/quote?' + query.toString(), { headers: { Accept: 'application/json' } });
   if (!response.ok) throw new Error('Impossible de calculer les frais de livraison.');
   const data = await response.json();
   state.shipping.quotes.set(key, data);
@@ -240,12 +248,13 @@ function emptyState(title, text, linkLabel, linkHref) {
 /* ------------------------------ Données ------------------------------ */
 
 async function loadStore() {
-  const response = await fetch('/api/store', { headers: { Accept: 'application/json' } });
+  const response = await fetch(API_BASE + '/api/store', { headers: { Accept: 'application/json' } });
   if (!response.ok) throw new Error('Impossible de charger la boutique.');
   const data = await response.json();
   state.settings = data.settings || {};
-  state.categories = data.categories || [];
-  state.products = data.products || [];
+  state.settings.heroImage = assetUrl(state.settings.heroImage);
+  state.categories = (data.categories || []).map((category) => ({ ...category, image: assetUrl(category.image) }));
+  state.products = (data.products || []).map((product) => ({ ...product, images: (product.images || []).map(assetUrl) }));
   sanitizeCart();
   renderChrome();
   loadShippingWilayas();
@@ -1215,7 +1224,7 @@ async function openCheckout() {
     submit.disabled = true;
     submit.textContent = 'Envoi en cours…';
     try {
-      const response = await fetch('/api/orders', {
+      const response = await fetch(API_BASE + '/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

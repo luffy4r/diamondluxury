@@ -4,6 +4,15 @@
    DIAMOND LUXURY — Dashboard
    ========================================================================== */
 
+const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? '' : 'https://dlback.onrender.com';
+const API_CREDENTIALS = API_BASE ? 'include' : 'same-origin';
+
+function assetUrl(src) {
+  if (!src || typeof src !== 'string') return src;
+  if (src.startsWith('data:') || /^https?:\/\//i.test(src)) return src;
+  return src.startsWith('/') ? API_BASE + src : src;
+}
+
 const $ = (selector, scope = document) => scope.querySelector(selector);
 const $$ = (selector, scope = document) => Array.from(scope.querySelectorAll(selector));
 
@@ -134,7 +143,7 @@ function categoryName(id) {
 
 async function shippingWilayas() {
   if (admin.shipping.wilayas) return admin.shipping.wilayas;
-  const response = await fetch('/api/shipping/wilayas', { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+  const response = await fetch(API_BASE + '/api/shipping/wilayas', { credentials: API_CREDENTIALS, headers: { Accept: 'application/json' } });
   if (!response.ok) throw new Error('Impossible de charger les wilayas.');
   const data = await response.json();
   admin.shipping.wilayas = data.wilayas || [];
@@ -144,7 +153,7 @@ async function shippingWilayas() {
 async function shippingCommunes(wilayaId) {
   const key = String(wilayaId);
   if (admin.shipping.communes.has(key)) return admin.shipping.communes.get(key);
-  const response = await fetch('/api/shipping/communes?wilaya=' + encodeURIComponent(wilayaId), { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+  const response = await fetch(API_BASE + '/api/shipping/communes?wilaya=' + encodeURIComponent(wilayaId), { credentials: API_CREDENTIALS, headers: { Accept: 'application/json' } });
   if (!response.ok) throw new Error('Impossible de charger les communes.');
   const data = await response.json();
   admin.shipping.communes.set(key, data.communes || []);
@@ -154,7 +163,7 @@ async function shippingCommunes(wilayaId) {
 async function shippingStopDesks(communeId) {
   const key = String(communeId);
   if (admin.shipping.stopdesks.has(key)) return admin.shipping.stopdesks.get(key);
-  const response = await fetch('/api/shipping/stopdesks?commune=' + encodeURIComponent(communeId), { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+  const response = await fetch(API_BASE + '/api/shipping/stopdesks?commune=' + encodeURIComponent(communeId), { credentials: API_CREDENTIALS, headers: { Accept: 'application/json' } });
   if (!response.ok) throw new Error('Impossible de charger les bureaux stop-desk.');
   const data = await response.json();
   const payload = { items: data.stopdesks || [], source: data.source, message: data.message || '' };
@@ -166,7 +175,7 @@ async function shippingQuote(wilayaId, communeId, mode, subtotal) {
   const key = [wilayaId, communeId, mode, subtotal].join(':');
   if (admin.shipping.quotes.has(key)) return admin.shipping.quotes.get(key);
   const query = new URLSearchParams({ wilaya: wilayaId, commune: communeId, mode, subtotal: subtotal || 0 });
-  const response = await fetch('/api/shipping/quote?' + query.toString(), { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+  const response = await fetch(API_BASE + '/api/shipping/quote?' + query.toString(), { credentials: API_CREDENTIALS, headers: { Accept: 'application/json' } });
   if (!response.ok) throw new Error('Impossible de calculer les frais de livraison.');
   const data = await response.json();
   admin.shipping.quotes.set(key, data);
@@ -198,14 +207,14 @@ async function copyValue(value) {
 
 async function api(path, options = {}) {
   const settings = {
-    credentials: 'same-origin',
+    credentials: API_CREDENTIALS,
     headers: { Accept: 'application/json' },
     ...options
   };
   if (options.body && !settings.headers['Content-Type']) {
     settings.headers = { ...settings.headers, 'Content-Type': 'application/json' };
   }
-  const response = await fetch(path, settings);
+  const response = await fetch(API_BASE + path, settings);
   if (response.status === 401) {
     showLogin();
     throw new Error('Session expirée, reconnectez-vous.');
@@ -248,7 +257,7 @@ function showApp() {
 async function boot() {
   $('#loginYear').textContent = new Date().getFullYear();
   try {
-    const session = await fetch('/api/admin/session', { credentials: 'same-origin' }).then((response) => response.json());
+    const session = await fetch(API_BASE + '/api/admin/session', { credentials: API_CREDENTIALS }).then((response) => response.json());
     if (session.authenticated) {
       showApp();
       await loadData();
@@ -409,7 +418,7 @@ function renderDashboard() {
           '<div class="panel-body">' +
             (alerts.length
               ? '<div class="alert-list">' + alerts.map((product) =>
-                  '<div class="alert-row"><img src="' + esc(product.images[0] || '/assets/logo-full.svg') + '" alt="">' +
+                  '<div class="alert-row"><img src="' + esc(assetUrl(product.images[0] || '/assets/logo-full.svg')) + '" alt="">' +
                   '<div class="alert-info"><strong>' + esc(product.name) + '</strong><small>' + stockBadge(product.stock).replace(/<\/?span[^>]*>/g, '') + ' · ' + esc(categoryName(product.categoryId)) + '</small></div>' +
                   '<button class="btn btn-outline" data-edit-product="' + esc(product.id) + '">Gérer</button></div>'
                 ).join('') + '</div>'
@@ -477,7 +486,7 @@ function renderProducts() {
         ? '<table class="data-table"><thead><tr><th>Article</th><th>Catégorie</th><th>Prix</th><th>Stock</th><th>Variantes</th><th>En ligne</th><th></th></tr></thead><tbody>' +
           products.map((product) =>
             '<tr>' +
-              '<td><div class="table-product"><img src="' + esc(product.images[0] || '/assets/logo-full.svg') + '" alt=""><div><strong>' + esc(product.name) + '</strong><small>' + (product.comparePrice > product.price ? '<span style="color:var(--red)">Promo</span> · ' : '') + (product.featured ? 'Signature' : 'Réf. ' + esc(product.id.slice(-6))) + '</small></div></div></td>' +
+              '<td><div class="table-product"><img src="' + esc(assetUrl(product.images[0] || '/assets/logo-full.svg')) + '" alt=""><div><strong>' + esc(product.name) + '</strong><small>' + (product.comparePrice > product.price ? '<span style="color:var(--red)">Promo</span> · ' : '') + (product.featured ? 'Signature' : 'Réf. ' + esc(product.id.slice(-6))) + '</small></div></div></td>' +
               '<td class="table-muted">' + esc(categoryName(product.categoryId)) + '</td>' +
               '<td class="table-nowrap">' + money(product.price) + (product.comparePrice > product.price ? '<br><small class="table-muted" style="text-decoration:line-through">' + money(product.comparePrice) + '</small>' : '') + '</td>' +
               '<td>' + stockBadge(product.stock) + '</td>' +
@@ -736,7 +745,7 @@ function renderProductImages() {
   $('#imageCount').textContent = draft.images.length + ' / 8';
   grid.innerHTML = draft.images.map((image, index) =>
     '<div class="image-tile">' +
-      '<img src="' + esc(image) + '" alt="Photo ' + (index + 1) + '">' +
+      '<img src="' + esc(assetUrl(image)) + '" alt="Photo ' + (index + 1) + '">' +
       (index === 0 ? '<span class="main-tag">Principale</span>' : '') +
       '<div class="tile-actions">' +
         (index !== 0 ? '<button type="button" data-image-main="' + index + '" title="Mettre en principale"><svg class="icon"><use href="#a-star"></use></svg></button>' : '') +
@@ -945,7 +954,7 @@ function renderCategories() {
       ? '<div class="category-admin-grid">' + categories.map((category) => {
           const count = admin.data.products.filter((product) => product.categoryId === category.id).length;
           return '<div class="admin-category-card">' +
-            '<div class="admin-category-media"><img src="' + esc(category.image || '/assets/logo-full.svg') + '" alt="' + esc(category.name) + '"><span class="cat-order">N° ' + category.order + '</span></div>' +
+            '<div class="admin-category-media"><img src="' + esc(assetUrl(category.image || '/assets/logo-full.svg')) + '" alt="' + esc(category.name) + '"><span class="cat-order">N° ' + category.order + '</span></div>' +
             '<div class="admin-category-body">' +
               '<h3>' + esc(category.name) + '</h3>' +
               '<p>' + esc(category.description || 'Aucune description.') + '</p>' +
@@ -977,7 +986,7 @@ function openCategoryForm(id) {
         '<div class="form-section-head"><h3>Visuel de la catégorie</h3></div>' +
         '<div class="upload-zone" id="categoryUpload"><svg class="icon"><use href="#a-image"></use></svg><strong>Cliquez pour choisir une image</strong><small>Format paysage conseillé.</small></div>' +
         '<input type="file" id="categoryImageInput" accept="image/*" hidden>' +
-        '<div class="hero-preview" id="categoryPreview"' + (category && category.image ? '' : ' hidden') + '><img src="' + esc(category && category.image ? category.image : '/assets/logo-full.svg') + '" alt="Visuel"></div>' +
+        '<div class="hero-preview" id="categoryPreview"' + (category && category.image ? '' : ' hidden') + '><img src="' + esc(assetUrl(category && category.image ? category.image : '/assets/logo-full.svg')) + '" alt="Visuel"></div>' +
       '</div>' +
       '<div class="form-error" id="categoryError"></div>' +
     '</div>' +
@@ -1093,7 +1102,7 @@ function openOrderDetail(id) {
         '<div>' +
           '<div class="detail-label">Articles commandés</div>' +
           order.items.map((item) =>
-            '<div class="order-item"><img src="' + esc(item.image || '/assets/logo-full.svg') + '" alt="">' +
+            '<div class="order-item"><img src="' + esc(assetUrl(item.image || '/assets/logo-full.svg')) + '" alt="">' +
               '<div class="order-item-info"><strong>' + esc(item.name) + '</strong><small>' + esc(item.color) + ' · ' + esc(item.size) + ' · Qté ' + item.qty + '</small></div>' +
               '<div class="order-item-price">' + money(item.price * item.qty) + '</div>' +
             '</div>'
@@ -1468,7 +1477,7 @@ function renderSettings() {
           '<div class="form-section-head"><h3>Page d’accueil</h3></div>' +
           '<div class="upload-zone" id="heroUpload"><svg class="icon"><use href="#a-image"></use></svg><strong>Remplacer le visuel principal</strong><small>Photo verticale conseillée (4:5).</small></div>' +
           '<input type="file" id="heroInput" accept="image/*" hidden>' +
-          '<div class="hero-preview"><img id="heroPreview" src="' + esc(settings.heroImage || '/assets/logo-full.svg') + '" alt="Visuel d’accueil"></div>' +
+          '<div class="hero-preview"><img id="heroPreview" src="' + esc(assetUrl(settings.heroImage || '/assets/logo-full.svg')) + '" alt="Visuel d’accueil"></div>' +
         '</div>' +
         '<div class="form-section">' +
           '<div class="form-section-head"><h3>Texte « La Maison »</h3></div>' +
@@ -1491,12 +1500,12 @@ function renderSettings() {
         '</div>' +
         '<div class="form-card">' +
           '<h3>Sauvegarde</h3><p>Vos articles, stocks et commandes sont enregistrés dans un fichier local.</p>' +
-          '<div class="backup-row"><div><strong>Exporter les données</strong><span>Fichier JSON complet</span></div><a class="btn btn-outline btn-sm" href="/api/admin/backup" download><svg class="icon sm"><use href="#a-download"></use></svg> Télécharger</a></div>' +
+          '<div class="backup-row"><div><strong>Exporter les données</strong><span>Fichier JSON complet</span></div><a class="btn btn-outline btn-sm" href="' + API_BASE + '/api/admin/backup" download><svg class="icon sm"><use href="#a-download"></use></svg> Télécharger</a></div>' +
           '<div class="danger-note" style="margin-top:14px">Pensez à télécharger une sauvegarde avant chaque grosse modification. Les photos ajoutées sont incluses dans cette sauvegarde.</div>' +
         '</div>' +
         '<div class="form-card">' +
           '<h3>Accès boutique</h3><p>Votre vitrine est visible à l’adresse du site. Le dashboard reste protégé par mot de passe.</p>' +
-          '<a class="btn btn-outline btn-block" href="/" target="_blank" rel="noopener"><svg class="icon sm"><use href="#a-external"></use></svg> Ouvrir la boutique</a>' +
+          '<a class="btn btn-outline btn-block" href="./" target="_blank" rel="noopener"><svg class="icon sm"><use href="#a-external"></use></svg> Ouvrir la boutique</a>' +
         '</div>' +
       '</div>' +
     '</div>';
@@ -1628,9 +1637,9 @@ function bindEvents() {
     button.disabled = true;
     button.textContent = 'Connexion…';
     try {
-      const response = await fetch('/api/admin/login', {
+      const response = await fetch(API_BASE + '/api/admin/login', {
         method: 'POST',
-        credentials: 'same-origin',
+        credentials: API_CREDENTIALS,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password: $('#loginPassword').value })
       });
@@ -1667,7 +1676,7 @@ function bindEvents() {
     if (window.innerWidth > 1024) closeSidebar();
   });
   $('#logoutBtn').addEventListener('click', async () => {
-    await fetch('/api/admin/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
+    await fetch(API_BASE + '/api/admin/logout', { method: 'POST', credentials: API_CREDENTIALS }).catch(() => {});
     location.reload();
   });
 
