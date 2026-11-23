@@ -5,7 +5,30 @@
    ========================================================================== */
 
 const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? '' : 'https://dlback.onrender.com';
-const API_CREDENTIALS = API_BASE ? 'include' : 'same-origin';
+const API_CREDENTIALS = 'omit';
+const ADMIN_TOKEN_KEY = 'dl_admin_token';
+
+function adminToken() {
+  try {
+    return localStorage.getItem(ADMIN_TOKEN_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+function setAdminToken(token) {
+  try {
+    if (token) localStorage.setItem(ADMIN_TOKEN_KEY, token);
+    else localStorage.removeItem(ADMIN_TOKEN_KEY);
+  } catch {
+    /* localStorage indisponible (navigation privée) : la session ne survivra pas au rechargement. */
+  }
+}
+
+function adminAuthHeaders(extra = {}) {
+  const token = adminToken();
+  return token ? { ...extra, Authorization: 'Bearer ' + token } : { ...extra };
+}
 
 const IMG_FAVICON = 'https://ik.imagekit.io/diamondluxury/IMG_7659.jpeg?updatedAt=1795273467452';
 const IMG_LOGO_FULL = 'https://ik.imagekit.io/diamondluxury/IMG_7657.jpeg?updatedAt=1795273315148';
@@ -213,16 +236,16 @@ async function copyValue(value) {
 /* ------------------------------ API ------------------------------ */
 
 async function api(path, options = {}) {
+  const headers = adminAuthHeaders({ Accept: 'application/json', ...(options.headers || {}) });
+  if (options.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
   const settings = {
     credentials: API_CREDENTIALS,
-    headers: { Accept: 'application/json' },
-    ...options
+    ...options,
+    headers
   };
-  if (options.body && !settings.headers['Content-Type']) {
-    settings.headers = { ...settings.headers, 'Content-Type': 'application/json' };
-  }
   const response = await fetch(API_BASE + path, settings);
   if (response.status === 401) {
+    setAdminToken('');
     showLogin();
     throw new Error('Session expirée, reconnectez-vous.');
   }
@@ -263,12 +286,21 @@ function showApp() {
 
 async function boot() {
   $('#loginYear').textContent = new Date().getFullYear();
+  if (!adminToken()) {
+    showLogin();
+    return;
+  }
   try {
-    const session = await fetch(API_BASE + '/api/admin/session', { credentials: API_CREDENTIALS }).then((response) => response.json());
-    if (session.authenticated) {
+    const response = await fetch(API_BASE + '/api/admin/session', {
+      credentials: API_CREDENTIALS,
+      headers: adminAuthHeaders({ Accept: 'application/json' })
+    });
+    const session = await response.json().catch(() => ({}));
+    if (response.ok && session.authenticated) {
       showApp();
       await loadData();
     } else {
+      setAdminToken('');
       showLogin();
     }
   } catch {
@@ -1507,7 +1539,7 @@ function renderSettings() {
         '</div>' +
         '<div class="form-card">' +
           '<h3>Sauvegarde</h3><p>Vos articles, stocks et commandes sont enregistrés dans un fichier local.</p>' +
-          '<div class="backup-row"><div><strong>Exporter les données</strong><span>Fichier JSON complet</span></div><a class="btn btn-outline btn-sm" href="' + API_BASE + '/api/admin/backup" download><svg class="icon sm"><use href="#a-download"></use></svg> Télécharger</a></div>' +
+          '<div class="backup-row"><div><strong>Exporter les données</strong><span>Fichier JSON complet</span></div><button type="button" class="btn btn-outline btn-sm" id="downloadBackup"><svg class="icon sm"><use href="#a-download"></use></svg> Télécharger</button></div>' +
           '<div class="danger-note" style="margin-top:14px">Pensez à télécharger une sauvegarde avant chaque grosse modification. Les photos ajoutées sont incluses dans cette sauvegarde.</div>' +
         '</div>' +
         '<div class="form-card">' +
@@ -1533,6 +1565,33 @@ function renderSettings() {
 
   $('#settingsForm').addEventListener('submit', saveSettings);
   $('#passwordForm').addEventListener('submit', savePassword);
+  $('#downloadBackup').addEventListener('click', downloadBackup);
+}
+
+async function downloadBackup() {
+  try {
+    const response = await fetch(API_BASE + '/api/admin/backup', {
+      credentials: API_CREDENTIALS,
+      headers: adminAuthHeaders({ Accept: 'application/json' })
+    });
+    if (response.status === 401) {
+      setAdminToken('');
+      showLogin();
+      throw new Error('Session expirée, reconnectez-vous.');
+    }
+    if (!response.ok) throw new Error('Téléchargement impossible.');
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'diamond-luxury-' + new Date().toISOString().slice(0, 10) + '.json';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    toast(error.message, 'error');
+  }
 }
 
 async function saveSettings(event) {
@@ -1652,6 +1711,8 @@ function bindEvents() {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Connexion impossible.');
+      if (!data.token) throw new Error('Réponse de connexion invalide.');
+      setAdminToken(data.token);
       $('#loginPassword').value = '';
       showApp();
       await loadData();
@@ -1683,7 +1744,12 @@ function bindEvents() {
     if (window.innerWidth > 1024) closeSidebar();
   });
   $('#logoutBtn').addEventListener('click', async () => {
-    await fetch(API_BASE + '/api/admin/logout', { method: 'POST', credentials: API_CREDENTIALS }).catch(() => {});
+    await fetch(API_BASE + '/api/admin/logout', {
+      method: 'POST',
+      credentials: API_CREDENTIALS,
+      headers: adminAuthHeaders()
+    }).catch(() => {});
+    setAdminToken('');
     location.reload();
   });
 
