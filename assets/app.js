@@ -326,17 +326,6 @@ function renderChrome() {
   $$('.announce-group').forEach((node) => { node.textContent = announceLine; });
   $('#year').textContent = new Date().getFullYear();
 
-  const hero = $('#heroImage');
-  const customHero = settings.heroImage && !/^data:image\/svg\+xml/i.test(settings.heroImage);
-  if (hero) {
-    const heroSrc = customHero ? assetUrl(settings.heroImage) : IMG_LOGO_FULL;
-    hero.src = heroSrc;
-    hero.classList.toggle('is-logo', /IMG_7657/i.test(heroSrc));
-  }
-  const availability = $('#heroAvailability');
-  const total = activeProducts().reduce((sum, product) => sum + product.stock, 0);
-  if (availability) availability.textContent = total > 0 ? 'Pièces en stock' : 'En rupture';
-
   const handle = '@' + (settings.instagram || 'diamond__luxury_');
   if ($('#instaHandle')) $('#instaHandle').textContent = handle;
   if ($('#instaLink')) $('#instaLink').href = instagramUrl();
@@ -383,13 +372,6 @@ function renderChrome() {
       '<div class="contact-item"><svg class="icon"><use href="#i-mail"></use></svg><div><small>Email</small><a href="mailto:' + esc(settings.email || '') + '">' + esc(settings.email || '—') + '</a></div></div>' +
       storeItems +
       '<div class="contact-item"><svg class="icon"><use href="#i-clock"></use></svg><div><small>Horaires</small><span>' + esc(OPENING_HOURS) + '</span></div></div>';
-  }
-
-  if ($('#editorialMain')) {
-    const first = state.products.find((product) => product.categoryId === 'cat_robes') || state.products[0];
-    const second = state.products.find((product) => product.categoryId === 'cat_bijoux') || state.products[1];
-    if (first) $('#editorialMain').src = first.images[0] || IMG_LOGO_FULL;
-    if (second) $('#editorialSmall').src = second.images[0] || IMG_LOGO_FULL;
   }
 
   updateBadges();
@@ -470,23 +452,6 @@ function renderHome() {
   const fill = activeProducts().filter((product) => !product.featured).sort((a, b) => b.stock - a.stock);
   const selection = [...featured, ...fill].slice(0, 4);
   $('#featuredProducts').innerHTML = productGrid(selection);
-
-  const images = [];
-  activeProducts().forEach((product) => {
-    (product.images || []).forEach((image) => {
-      if (images.length < 6 && !images.includes(image)) images.push(image);
-    });
-  });
-  state.categories.forEach((category) => {
-    if (images.length < 6 && category.image && !images.includes(category.image)) images.push(category.image);
-  });
-  const insta = images.slice(0, 6).map((image) =>
-    '<a href="' + instagramUrl() + '" target="_blank" rel="noopener" aria-label="Voir sur Instagram">' +
-      '<img src="' + esc(image) + '" alt="Diamond Luxury sur Instagram" loading="lazy">' +
-      '<span class="insta-ico"><svg class="icon"><use href="#i-instagram"></use></svg></span>' +
-    '</a>'
-  ).join('');
-  $('#instaGrid').innerHTML = insta;
 
   observeReveals();
 }
