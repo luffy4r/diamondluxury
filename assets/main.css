@@ -67,6 +67,7 @@ em { font-style: italic; }
 .announce-track { display: flex; width: max-content; animation: announce-marquee 32s linear infinite; will-change: transform; }
 .announce:hover .announce-track { animation-play-state: paused; }
 .announce-group { display: block; flex: 0 0 auto; padding-right: 56px; white-space: nowrap; font-size: 11px; font-weight: 600; letter-spacing: .18em; text-transform: uppercase; color: #000; }
+@media (max-width: 768px) { .announce-group { font-size: 9px; } }
 @keyframes announce-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 @media (prefers-reduced-motion: reduce) { .announce-track { animation: none; } }
 

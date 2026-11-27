@@ -4,7 +4,7 @@
    DIAMOND LUXURY — Dashboard
    ========================================================================== */
 
-const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? '' : 'https://dlback.onrender.com';
+const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? '' : 'https://dlback-97h3.onrender.com';
 const API_CREDENTIALS = 'omit';
 const ADMIN_TOKEN_KEY = 'dl_admin_token';
 

@@ -4,7 +4,7 @@
    DIAMOND LUXURY — Application vitrine
    ========================================================================== */
 
-const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? '' : 'https://dlback.onrender.com';
+const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? '' : 'https://dlback-97h3.onrender.com';
 
 const IMG_FAVICON = 'assets/IMG_7657.jpeg';
 const IMG_LOGO_FULL = 'assets/IMG_7657.jpeg';
