@@ -30,9 +30,9 @@ function adminAuthHeaders(extra = {}) {
   return token ? { ...extra, Authorization: 'Bearer ' + token } : { ...extra };
 }
 
-const IMG_FAVICON = 'https://ik.imagekit.io/diamondluxury/IMG_7659.jpeg?updatedAt=1795273467452';
-const IMG_LOGO_FULL = 'https://ik.imagekit.io/diamondluxury/IMG_7657.jpeg?updatedAt=1795273315148';
-const IMG_LOGO_MARK = 'https://ik.imagekit.io/diamondluxury/55f3c57d-84e5-4dcf-afd9-0db725d48fd0.webp?updatedAt=1795273627679';
+const IMG_FAVICON = 'assets/IMG_7657.jpeg';
+const IMG_LOGO_FULL = 'assets/IMG_7657.jpeg';
+const IMG_LOGO_MARK = 'assets/IMG_7657.jpeg';
 
 function assetUrl(src) {
   if (!src || typeof src !== 'string') return src;
@@ -46,16 +46,30 @@ function assetUrl(src) {
 const $ = (selector, scope = document) => scope.querySelector(selector);
 const $$ = (selector, scope = document) => Array.from(scope.querySelectorAll(selector));
 
+function localDateKey(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return year + '-' + month + '-' + day;
+}
+
+function todayKey() {
+  return localDateKey(new Date());
+}
+
 const admin = {
   data: null,
   section: 'dashboard',
+  dashDate: todayKey(),
   productSearch: '',
   productCategory: 'all',
   productStatus: 'all',
   orderFilter: 'all',
+  messageFilter: 'all',
   productDraft: null,
   categoryDraft: null,
-  orderDraft: null,
   orderDraft: null,
   heroDraft: '',
   saving: false,
@@ -338,11 +352,12 @@ function closeSidebar() {
 /* ------------------------------ Navigation ------------------------------ */
 
 const SECTION_META = {
-  dashboard: ['Tableau de bord', 'Vue d’ensemble de votre maison.'],
+  dashboard: ['Tableau de bord', 'Vue d’ensemble de Diamond Luxury.'],
   products: ['Articles', 'Gérez votre catalogue, les variantes et le stock.'],
   categories: ['Catégories', 'Organisez les univers de la boutique.'],
   orders: ['Commandes', 'Suivez et traitez les commandes reçues.'],
-  settings: ['Réglages', 'Identité, livraison et sécurité.']
+  messages: ['Boîte de réception', 'Les messages reçus depuis la boutique.'],
+  settings: ['Réglages', 'Identité, livraison, codes promo et sécurité.']
 };
 
 function setSection(section) {
@@ -357,7 +372,21 @@ function updateSidebar() {
   const pill = $('#sideOrdersCount');
   pill.textContent = newOrders;
   pill.hidden = newOrders === 0;
+  const unread = admin.data ? (admin.data.stats.unreadMessages || 0) : 0;
+  const messagePill = $('#sideMessagesCount');
+  if (messagePill) {
+    messagePill.textContent = unread;
+    messagePill.hidden = unread === 0;
+  }
   $$('.side-link[data-section]').forEach((link) => link.classList.toggle('active', link.dataset.section === admin.section));
+}
+
+function animateSection() {
+  const content = $('#adminContent');
+  if (!content) return;
+  content.classList.remove('section-anim');
+  void content.offsetWidth;
+  content.classList.add('section-anim');
 }
 
 function render() {
@@ -371,7 +400,9 @@ function render() {
   else if (admin.section === 'products') renderProducts();
   else if (admin.section === 'categories') renderCategories();
   else if (admin.section === 'orders') renderOrders();
+  else if (admin.section === 'messages') renderMessages();
   else if (admin.section === 'settings') renderSettings();
+  animateSection();
 }
 
 /* ------------------------------ Dashboard ------------------------------ */
@@ -381,9 +412,21 @@ function renderDashboard() {
   const stats = data.stats;
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Bonjour' : hour < 18 ? 'Bon après-midi' : 'Bonsoir';
-  const today = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date());
+  const today = todayKey();
+  const selectedDate = admin.dashDate === 'all' ? '' : admin.dashDate;
+  const isToday = selectedDate === today;
+  const dateLabel = selectedDate
+    ? new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(selectedDate + 'T12:00:00'))
+    : 'Toutes les dates';
 
-  const recentOrders = data.orders.slice(0, 6);
+  const dayOrders = selectedDate
+    ? data.orders.filter((order) => localDateKey(order.createdAt) === selectedDate)
+    : data.orders;
+  const validDayOrders = dayOrders.filter((order) => order.status !== 'annulée');
+  const revenue = validDayOrders.reduce((sum, order) => sum + order.total, 0);
+  const soldItems = validDayOrders.reduce((sum, order) => sum + order.items.reduce((qty, item) => qty + item.qty, 0), 0);
+  const dayNewOrders = dayOrders.filter((order) => order.status === 'nouvelle').length;
+
   const alerts = data.products
     .filter((product) => product.stock === 0)
     .sort((a, b) => a.stock - b.stock)
@@ -402,8 +445,15 @@ function renderDashboard() {
   $('#adminContent').innerHTML =
     '<div class="page-greeting">' +
       '<div><h2>' + greeting + ', <em style="font-style:italic;color:var(--gold-deep)">Diamond</em></h2>' +
-      '<p>Voici ce qui se passe dans votre maison aujourd’hui.</p></div>' +
-      '<div class="date-chip">' + esc(today) + '</div>' +
+      '<p>' + (selectedDate === '' ? 'Vue globale de votre activité.' : isToday ? 'Voici ce qui se passe chez Diamond Luxury aujourd’hui.' : 'Activité du ' + esc(dateLabel) + '.') + '</p></div>' +
+      '<div class="dash-date">' +
+        '<label class="dash-date-field">' +
+          '<svg class="icon sm"><use href="#a-calendar"></use></svg>' +
+          '<input type="date" id="dashDate" value="' + esc(selectedDate) + '" aria-label="Choisir une date">' +
+        '</label>' +
+        '<button type="button" class="btn btn-outline btn-sm dash-quick' + (isToday ? ' active' : '') + '" data-dash-date="today">Aujourd’hui</button>' +
+        '<button type="button" class="btn btn-outline btn-sm dash-quick' + (admin.dashDate === 'all' ? ' active' : '') + '" data-dash-date="all">Tout</button>' +
+      '</div>' +
     '</div>' +
 
     (stats.newOrders > 0
@@ -415,8 +465,8 @@ function renderDashboard() {
       : '') +
 
     '<div class="stat-grid">' +
-      '<div class="stat-card"><div class="stat-top"><div><div class="stat-label">Chiffre d’affaires</div><div class="stat-value">' + money(stats.revenue) + '</div></div><div class="stat-icon"><svg class="icon"><use href="#a-tag"></use></svg></div></div><div class="stat-foot">Commandes confirmées et livrées</div></div>' +
-      '<div class="stat-card"><div class="stat-top"><div><div class="stat-label">Commandes</div><div class="stat-value">' + stats.orders + '</div></div><div class="stat-icon"><svg class="icon"><use href="#a-receipt"></use></svg></div></div><div class="stat-foot"><strong>' + stats.newOrders + '</strong> nouvelle' + (stats.newOrders > 1 ? 's' : '') + ' · ' + stats.soldItems + ' article' + (stats.soldItems > 1 ? 's' : '') + ' vendu' + (stats.soldItems > 1 ? 's' : '') + '</div></div>' +
+      '<div class="stat-card"><div class="stat-top"><div><div class="stat-label">Chiffre d’affaires</div><div class="stat-value">' + money(revenue) + '</div></div><div class="stat-icon"><svg class="icon"><use href="#a-tag"></use></svg></div></div><div class="stat-foot">' + (selectedDate ? esc(dateLabel) : 'Cumul global') + '</div></div>' +
+      '<div class="stat-card"><div class="stat-top"><div><div class="stat-label">Commandes</div><div class="stat-value">' + dayOrders.length + '</div></div><div class="stat-icon"><svg class="icon"><use href="#a-receipt"></use></svg></div></div><div class="stat-foot"><strong>' + dayNewOrders + '</strong> nouvelle' + (dayNewOrders > 1 ? 's' : '') + ' · ' + soldItems + ' article' + (soldItems > 1 ? 's' : '') + ' vendu' + (soldItems > 1 ? 's' : '') + '</div></div>' +
       '<div class="stat-card"><div class="stat-top"><div><div class="stat-label">Articles en ligne</div><div class="stat-value">' + stats.activeProducts + '</div></div><div class="stat-icon"><svg class="icon"><use href="#a-box"></use></svg></div></div><div class="stat-foot">' + stats.products + ' article' + (stats.products > 1 ? 's' : '') + ' au total</div></div>' +
       '<div class="stat-card"><div class="stat-top"><div><div class="stat-label">Ruptures</div><div class="stat-value">' + (stats.outOfStock > 0 ? 'En rupture' : 'Aucune') + '</div></div><div class="stat-icon"><svg class="icon"><use href="#a-diamond"></use></svg></div></div><div class="stat-foot">' + (stats.outOfStock > 0 ? 'Articles à réassortir' : 'Tous les articles sont disponibles') + '</div></div>' +
     '</div>' +
@@ -424,11 +474,11 @@ function renderDashboard() {
     '<div class="dash-grid">' +
       '<div class="dash-stack">' +
         '<div class="panel">' +
-          '<div class="panel-head"><div><h3>Dernières commandes</h3><div class="panel-sub">Les commandes les plus récentes</div></div><button class="panel-link" data-go-orders>Tout voir <svg class="icon sm"><use href="#a-chevron"></use></svg></button></div>' +
+          '<div class="panel-head"><div><h3>' + (selectedDate ? 'Commandes du jour' : 'Toutes les commandes') + '</h3><div class="panel-sub">' + esc(dateLabel) + '</div></div><button class="panel-link" data-go-orders>Tout voir <svg class="icon sm"><use href="#a-chevron"></use></svg></button></div>' +
           '<div class="panel-body flush"><div class="table-wrap">' +
-            (recentOrders.length
+            (dayOrders.length
               ? '<table class="data-table"><thead><tr><th>Référence</th><th>Client</th><th>Date</th><th>Total</th><th>Statut</th><th></th></tr></thead><tbody>' +
-                recentOrders.map((order) =>
+                dayOrders.map((order) =>
                   '<tr><td class="table-nowrap"><strong style="font-weight:500;color:var(--ink)">' + esc(order.ref) + '</strong></td>' +
                   '<td class="order-customer"><strong>' + esc(order.customer.name) + '</strong><small>' + esc(order.customer.phone) + '</small></td>' +
                   '<td class="table-muted table-nowrap">' + timeAgo(order.createdAt) + '</td>' +
@@ -436,7 +486,7 @@ function renderDashboard() {
                   '<td>' + statusBadge(order.status) + '</td>' +
                   '<td class="num"><button class="row-btn" data-view-order="' + esc(order.id) + '" aria-label="Voir la commande"><svg class="icon"><use href="#a-eye"></use></svg></button></td></tr>'
                 ).join('') + '</tbody></table>'
-              : '<div class="admin-empty" style="padding:36px"><p style="margin:0">Aucune commande pour le moment.</p></div>') +
+              : '<div class="admin-empty" style="padding:36px"><p style="margin:0">Aucune commande pour cette date.</p></div>') +
           '</div></div>' +
         '</div>' +
 
@@ -471,7 +521,7 @@ function renderDashboard() {
             '<button class="quick-action" data-quick-add-product><svg class="icon"><use href="#a-plus"></use></svg><strong>Ajouter un article</strong><small>Photos, tailles et stock</small></button>' +
             '<button class="quick-action" data-quick-add-category><svg class="icon"><use href="#a-folder"></use></svg><strong>Nouvelle catégorie</strong><small>Organiser la boutique</small></button>' +
             '<button class="quick-action" data-go-orders><svg class="icon"><use href="#a-receipt"></use></svg><strong>Commandes</strong><small>Suivre les livraisons</small></button>' +
-            '<button class="quick-action" data-go-settings><svg class="icon"><use href="#a-settings"></use></svg><strong>Réglages</strong><small>Instagram et livraison</small></button>' +
+            '<button class="quick-action" data-go-settings><svg class="icon"><use href="#a-settings"></use></svg><strong>Réglages</strong><small>Identité et codes promo</small></button>' +
           '</div></div>' +
         '</div>' +
       '</div>' +
@@ -1148,6 +1198,9 @@ function openOrderDetail(id) {
           ).join('') +
           '<div class="order-totals">' +
             '<div class="order-total-row"><span>Sous-total</span><span>' + money(order.subtotal) + '</span></div>' +
+            (order.promo && order.promo.code
+              ? '<div class="order-total-row discount"><span>Code ' + esc(order.promo.code) + ' (−' + Number(order.promo.percent) + '%)</span><span>−' + money(order.discount || 0) + '</span></div>'
+              : '') +
             '<div class="order-total-row"><span>Livraison</span><span>' + (order.delivery === 0 ? 'Offerte' : money(order.delivery)) + '</span></div>' +
             '<div class="order-total-row grand"><span>Total</span><span>' + money(order.total) + '</span></div>' +
           '</div>' +
@@ -1268,6 +1321,7 @@ async function openOrderEdit(id) {
           '<div class="form-grid">' +
             '<div class="field"><label>Frais de livraison (DA)</label><input id="oeDelivery" type="number" min="0" step="1" value="' + (draft.delivery || 0) + '"></div>' +
             '<div class="field"><label>Sous-total</label><input id="oeSubtotal" readonly value="' + (draft.subtotal || 0) + '"></div>' +
+            '<div class="field"><label>Réduction' + (draft.promo && draft.promo.code ? ' (' + esc(draft.promo.code) + ')' : '') + '</label><input id="oeDiscount" readonly value="' + (draft.discount || 0) + '"></div>' +
             '<div class="field"><label>Total</label><input id="oeTotal" readonly value="' + (draft.total || 0) + '"></div>' +
           '</div>' +
         '</div>' +
@@ -1286,8 +1340,11 @@ async function openOrderEdit(id) {
       draft.subtotal = subtotal;
       const delivery = Number($('#oeDelivery').value) || 0;
       draft.delivery = delivery;
-      draft.total = subtotal + delivery;
+      const discount = draft.promo ? Math.round(subtotal * (Number(draft.promo.percent) || 0) / 100) : 0;
+      draft.discount = Math.min(discount, subtotal);
+      draft.total = Math.max(0, subtotal - draft.discount) + delivery;
       $('#oeSubtotal').value = subtotal;
+      if ($('#oeDiscount')) $('#oeDiscount').value = draft.discount;
       $('#oeTotal').value = draft.total;
     };
 
@@ -1487,6 +1544,88 @@ async function deleteOrder(id) {
   }
 }
 
+/* ------------------------------ Boîte de réception ------------------------------ */
+
+function renderMessages() {
+  const messages = admin.data.messages || [];
+  const unread = messages.filter((message) => !message.read).length;
+  const filtered = admin.messageFilter === 'unread'
+    ? messages.filter((message) => !message.read)
+    : admin.messageFilter === 'read'
+      ? messages.filter((message) => message.read)
+      : messages;
+
+  $('#adminContent').innerHTML =
+    '<div class="admin-toolbar">' +
+      '<div class="filter-tabs">' +
+        '<button class="filter-tab' + (admin.messageFilter === 'all' ? ' active' : '') + '" data-message-filter="all">Tous (' + messages.length + ')</button>' +
+        '<button class="filter-tab' + (admin.messageFilter === 'unread' ? ' active' : '') + '" data-message-filter="unread">Non lus (' + unread + ')</button>' +
+        '<button class="filter-tab' + (admin.messageFilter === 'read' ? ' active' : '') + '" data-message-filter="read">Lus (' + (messages.length - unread) + ')</button>' +
+      '</div>' +
+      '<div class="admin-toolbar-right">' +
+        (unread ? '<button class="btn btn-outline btn-sm" data-mark-all-read><svg class="icon sm"><use href="#a-check"></use></svg> Tout marquer comme lu</button>' : '') +
+        '<span style="font-size:10.5px;color:var(--muted)">' + filtered.length + ' message' + (filtered.length > 1 ? 's' : '') + '</span>' +
+      '</div>' +
+    '</div>' +
+    (filtered.length
+      ? '<div class="message-list">' + filtered.map((message, index) =>
+          '<article class="message-card' + (message.read ? '' : ' unread') + '" style="animation-delay:' + Math.min(index, 8) * 55 + 'ms">' +
+            '<div class="message-head">' +
+              '<div class="message-avatar">' + esc(message.name.slice(0, 1).toUpperCase()) + '</div>' +
+              '<div class="message-who"><strong>' + esc(message.name) + '</strong><small>' + dateTime(message.createdAt) + '</small></div>' +
+              (message.read ? '<span class="message-state">Lu</span>' : '<span class="message-state new">Nouveau</span>') +
+            '</div>' +
+            '<div class="message-contact">' +
+              '<a href="tel:' + esc(message.phone) + '"><svg class="icon sm"><use href="#a-phone"></use></svg> ' + esc(message.phone) + '</a>' +
+              (message.email ? '<a href="mailto:' + esc(message.email) + '"><svg class="icon sm"><use href="#a-mail"></use></svg> ' + esc(message.email) + '</a>' : '') +
+            '</div>' +
+            '<p class="message-body">' + esc(message.message) + '</p>' +
+            '<div class="message-actions">' +
+              '<button class="btn btn-outline btn-sm" data-message-toggle="' + esc(message.id) + '" data-read="' + (message.read ? 'false' : 'true') + '"><svg class="icon sm"><use href="#a-' + (message.read ? 'mail' : 'check') + '"></use></svg> ' + (message.read ? 'Marquer non lu' : 'Marquer lu') + '</button>' +
+              '<button class="btn btn-danger btn-sm" data-delete-message="' + esc(message.id) + '"><svg class="icon sm"><use href="#a-trash"></use></svg> Supprimer</button>' +
+            '</div>' +
+          '</article>'
+        ).join('') + '</div>'
+      : '<div class="admin-empty"><svg class="icon"><use href="#a-mail"></use></svg><h3>Aucun message</h3><p>Les messages envoyés depuis la boutique apparaîtront ici.</p></div>'
+    );
+}
+
+async function setMessageRead(id, read) {
+  try {
+    await api('/api/admin/messages/' + encodeURIComponent(id) + '/read', {
+      method: 'PATCH',
+      body: JSON.stringify({ read })
+    });
+    await refresh(read ? 'Message marqué comme lu.' : 'Message marqué comme non lu.');
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
+async function markAllMessagesRead() {
+  const unread = (admin.data.messages || []).filter((message) => !message.read);
+  if (!unread.length) return;
+  try {
+    await Promise.all(unread.map((message) => api('/api/admin/messages/' + encodeURIComponent(message.id) + '/read', {
+      method: 'PATCH',
+      body: JSON.stringify({ read: true })
+    })));
+    await refresh(unread.length + ' message' + (unread.length > 1 ? 's' : '') + ' marqué' + (unread.length > 1 ? 's' : '') + ' comme lu' + (unread.length > 1 ? 's' : '') + '.');
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
+async function deleteMessage(id) {
+  if (!confirm('Supprimer définitivement ce message ?')) return;
+  try {
+    await api('/api/admin/messages/' + encodeURIComponent(id), { method: 'DELETE' });
+    await refresh('Message supprimé.');
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
 /* ------------------------------ Réglages ------------------------------ */
 
 function renderSettings() {
@@ -1494,8 +1633,8 @@ function renderSettings() {
   $('#adminContent').innerHTML =
     '<div class="settings-grid">' +
       '<form class="form-card" id="settingsForm">' +
-        '<h3>Identité de la maison</h3>' +
-        '<p>Ces informations apparaissent sur la boutique, le footer et dans les messages Instagram.</p>' +
+        '<h3>Identité Diamond Luxury</h3>' +
+        '<p>Ces informations apparaissent sur la boutique, le footer et dans les messages reçus depuis le site.</p>' +
         '<div class="form-grid">' +
           '<div class="field"><label for="setBrand">Nom de la marque</label><input id="setBrand" value="' + esc(settings.brandName) + '" maxlength="60"></div>' +
           '<div class="field"><label for="setInstagram">Compte Instagram</label><input id="setInstagram" value="' + esc(settings.instagram) + '" maxlength="80" placeholder="diamond__luxury_"></div>' +
@@ -1519,7 +1658,7 @@ function renderSettings() {
           '<div class="hero-preview"><img id="heroPreview" src="' + esc(assetUrl(settings.heroImage || IMG_LOGO_FULL)) + '" alt="Visuel d’accueil"></div>' +
         '</div>' +
         '<div class="form-section">' +
-          '<div class="form-section-head"><h3>Texte « La Maison »</h3></div>' +
+          '<div class="form-section-head"><h3>Texte « Diamond Luxury »</h3></div>' +
           '<div class="field"><textarea id="setAbout" rows="6" maxlength="3000">' + esc(settings.about) + '</textarea></div>' +
         '</div>' +
         '<div class="form-error" id="settingsError"></div>' +
@@ -1536,6 +1675,28 @@ function renderSettings() {
             '<div class="form-error" id="passwordError"></div>' +
             '<button type="submit" class="btn btn-dark btn-block" id="savePassword" style="margin-top:16px"><svg class="icon sm"><use href="#a-key"></use></svg> Mettre à jour</button>' +
           '</form>' +
+        '</div>' +
+        '<div class="form-card" id="promoCard">' +
+          '<h3>Codes promo</h3><p>Créez plusieurs codes, choisissez leur réduction et activez-les quand vous le souhaitez.</p>' +
+          '<form id="promoForm">' +
+            '<div class="promo-form-row">' +
+              '<div class="field"><label for="promoCode">Nom du code</label><input id="promoCode" placeholder="DIAMOND10" maxlength="30" required autocomplete="off" spellcheck="false"></div>' +
+              '<div class="field promo-percent-field"><label for="promoPercent">Réduction (%)</label><input id="promoPercent" type="number" min="1" max="100" step="1" value="10" required></div>' +
+            '</div>' +
+            '<div class="form-error" id="promoError"></div>' +
+            '<button type="submit" class="btn btn-gold btn-block" id="addPromo"><svg class="icon sm"><use href="#a-tag"></use></svg> Ajouter le code</button>' +
+          '</form>' +
+          '<div class="promo-list" id="promoList">' +
+            (Array.isArray(settings.promoCodes) && settings.promoCodes.length
+              ? settings.promoCodes.map((promo) =>
+                  '<div class="promo-row' + (promo.active === false ? ' disabled' : '') + '">' +
+                    '<div class="promo-info"><strong>' + esc(promo.code) + '</strong><small>−' + Number(promo.percent) + '% sur les articles' + (promo.active === false ? ' · désactivé' : '') + '</small></div>' +
+                    '<button type="button" class="promo-toggle' + (promo.active === false ? '' : ' active') + '" data-promo-toggle="' + esc(promo.id) + '" aria-label="' + (promo.active === false ? 'Activer' : 'Désactiver') + ' ' + esc(promo.code) + '"><svg class="icon sm"><use href="#a-' + (promo.active === false ? 'check' : 'close') + '"></use></svg></button>' +
+                    '<button type="button" class="row-btn danger" data-promo-delete="' + esc(promo.id) + '" aria-label="Supprimer ' + esc(promo.code) + '"><svg class="icon sm"><use href="#a-trash"></use></svg></button>' +
+                  '</div>'
+                ).join('')
+              : '<p class="hint">Aucun code promo pour le moment.</p>') +
+          '</div>' +
         '</div>' +
         '<div class="form-card">' +
           '<h3>Sauvegarde</h3><p>Vos articles, stocks et commandes sont enregistrés dans un fichier local.</p>' +
@@ -1566,6 +1727,67 @@ function renderSettings() {
   $('#settingsForm').addEventListener('submit', saveSettings);
   $('#passwordForm').addEventListener('submit', savePassword);
   $('#downloadBackup').addEventListener('click', downloadBackup);
+
+  const promoInput = $('#promoCode');
+  promoInput.addEventListener('input', () => {
+    promoInput.value = promoInput.value.toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+  });
+  $('#promoForm').addEventListener('submit', createPromo);
+}
+
+async function createPromo(event) {
+  event.preventDefault();
+  const errorBox = $('#promoError');
+  const button = $('#addPromo');
+  errorBox.classList.remove('show');
+  const code = $('#promoCode').value.trim();
+  const percent = Number($('#promoPercent').value);
+  if (!code) {
+    errorBox.textContent = 'Saisissez un nom de code promo.';
+    errorBox.classList.add('show');
+    return;
+  }
+  if (!Number.isFinite(percent) || percent < 1 || percent > 100) {
+    errorBox.textContent = 'La réduction doit être comprise entre 1 et 100 %.';
+    errorBox.classList.add('show');
+    return;
+  }
+  button.disabled = true;
+  try {
+    await api('/api/admin/promos', {
+      method: 'POST',
+      body: JSON.stringify({ code, percent })
+    });
+    await refresh('Code promo ' + code.toUpperCase() + ' ajouté.');
+  } catch (error) {
+    errorBox.textContent = error.message;
+    errorBox.classList.add('show');
+    button.disabled = false;
+  }
+}
+
+async function togglePromo(id) {
+  const promo = ((admin.data.settings && admin.data.settings.promoCodes) || []).find((entry) => entry.id === id);
+  if (!promo) return;
+  try {
+    await api('/api/admin/promos/' + encodeURIComponent(id), {
+      method: 'PUT',
+      body: JSON.stringify({ active: promo.active === false })
+    });
+    await refresh(promo.active === false ? 'Code promo activé.' : 'Code promo désactivé.');
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
+async function deletePromo(id) {
+  if (!confirm('Supprimer définitivement ce code promo ?')) return;
+  try {
+    await api('/api/admin/promos/' + encodeURIComponent(id), { method: 'DELETE' });
+    await refresh('Code promo supprimé.');
+  } catch (error) {
+    toast(error.message, 'error');
+  }
 }
 
 async function downloadBackup() {
@@ -1795,6 +2017,26 @@ function bindEvents() {
     if (event.target.closest('[data-go-settings]')) { setSection('settings'); return; }
     if (event.target.closest('[data-go-products]')) { setSection('products'); return; }
 
+    const dashQuick = event.target.closest('[data-dash-date]');
+    if (dashQuick) {
+      admin.dashDate = dashQuick.dataset.dashDate === 'all' ? 'all' : todayKey();
+      renderDashboard();
+      return;
+    }
+
+    const messageFilter = event.target.closest('[data-message-filter]');
+    if (messageFilter) { admin.messageFilter = messageFilter.dataset.messageFilter; renderMessages(); return; }
+    if (event.target.closest('[data-mark-all-read]')) { markAllMessagesRead(); return; }
+    const messageToggle = event.target.closest('[data-message-toggle]');
+    if (messageToggle) { setMessageRead(messageToggle.dataset.messageToggle, messageToggle.dataset.read === 'true'); return; }
+    const messageDelete = event.target.closest('[data-delete-message]');
+    if (messageDelete) { deleteMessage(messageDelete.dataset.deleteMessage); return; }
+
+    const promoToggle = event.target.closest('[data-promo-toggle]');
+    if (promoToggle) { togglePromo(promoToggle.dataset.promoToggle); return; }
+    const promoDelete = event.target.closest('[data-promo-delete]');
+    if (promoDelete) { deletePromo(promoDelete.dataset.promoDelete); return; }
+
     const editProduct = event.target.closest('[data-edit-product]');
     if (editProduct) { openProductForm(editProduct.dataset.editProduct); return; }
     const duplicate = event.target.closest('[data-duplicate-product]');
@@ -1828,6 +2070,11 @@ function bindEvents() {
   });
 
   $('#adminContent').addEventListener('change', (event) => {
+    if (event.target.id === 'dashDate') {
+      admin.dashDate = event.target.value || 'all';
+      renderDashboard();
+      return;
+    }
     if (event.target.id === 'productCategoryFilter') {
       admin.productCategory = event.target.value;
       renderProducts();

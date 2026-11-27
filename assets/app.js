@@ -6,9 +6,42 @@
 
 const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? '' : 'https://dlback.onrender.com';
 
-const IMG_FAVICON = 'https://ik.imagekit.io/diamondluxury/IMG_7659.jpeg?updatedAt=1795273467452';
-const IMG_LOGO_FULL = 'https://ik.imagekit.io/diamondluxury/IMG_7657.jpeg?updatedAt=1795273315148';
-const IMG_LOGO_MARK = 'https://ik.imagekit.io/diamondluxury/55f3c57d-84e5-4dcf-afd9-0db725d48fd0.webp?updatedAt=1795273627679';
+const IMG_FAVICON = 'assets/IMG_7657.jpeg';
+const IMG_LOGO_FULL = 'assets/IMG_7657.jpeg';
+const IMG_LOGO_MARK = 'assets/IMG_7657.jpeg';
+
+const STORES = [
+  { label: 'Dely Brahim, Alger', query: 'Dely Brahim, Alger, Algérie' },
+  { label: 'City Center, Alger', query: 'City Center, Alger, Algérie' },
+  { label: 'Park Mall, Sétif', query: 'Park Mall, Sétif, Algérie' }
+];
+
+const OPENING_HOURS = 'Tous les jours · 9h – minuit';
+
+function mapsUrl(query) {
+  return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(query);
+}
+
+/* Logos / initiales des transporteurs.
+   Pour afficher un vrai logo, renseignez simplement `logo` avec une URL
+   (fichier local ou hébergé) : il remplacera les initiales automatiquement. */
+const CARRIER_LOGOS = {
+  yalidine: { match: /yalidine/i, name: 'Yalidine Express', initials: 'YA', logo: '', color: '#0f6b3a', bg: '#e7f3ea' },
+  noest: { match: /noest/i, name: 'Noest Express', initials: 'NO', logo: '', color: '#1d4ed8', bg: '#e8eefc' },
+  zr: { match: /\bzr\b/i, name: 'ZR Express', initials: 'ZR', logo: '', color: '#b45309', bg: '#fdf1e3' },
+  dhd: { match: /\bdhd\b/i, name: 'DHD Express', initials: 'DHD', logo: '', color: '#7c2d12', bg: '#fbeae3' },
+  anderson: { match: /anderson/i, name: 'Anderson Express', initials: 'AN', logo: '', color: '#6d28d9', bg: '#f0e9fd' },
+  zimou: { match: /zimou/i, name: 'Zimou Express', initials: 'ZE', logo: '', color: '#0f766e', bg: '#e6f4f1' },
+  default: { match: null, name: 'Point relais', initials: 'PR', logo: '', color: '#8a6a1f', bg: '#f7f0dc' }
+};
+
+function carrierOf(office) {
+  const raw = String((office && (office.carrier || office.provider || office.name)) || '');
+  const found = Object.values(CARRIER_LOGOS).find((entry) => entry.match && entry.match.test(raw));
+  if (found) return found;
+  const fallbackName = office && office.name ? String(office.name).split('—')[0].trim() : '';
+  return fallbackName ? { ...CARRIER_LOGOS.default, name: fallbackName } : CARRIER_LOGOS.default;
+}
 
 function assetUrl(src) {
   if (!src || typeof src !== 'string') return src;
@@ -49,6 +82,8 @@ const state = {
 };
 
 let productView = null;
+let quickView = null;
+let quickViewTrigger = null;
 let revealObserver = null;
 
 /* ------------------------------ Utilitaires ------------------------------ */
@@ -293,7 +328,11 @@ function renderChrome() {
 
   const hero = $('#heroImage');
   const customHero = settings.heroImage && !/^data:image\/svg\+xml/i.test(settings.heroImage);
-  if (hero) hero.src = customHero ? assetUrl(settings.heroImage) : IMG_LOGO_FULL;
+  if (hero) {
+    const heroSrc = customHero ? assetUrl(settings.heroImage) : IMG_LOGO_FULL;
+    hero.src = heroSrc;
+    hero.classList.toggle('is-logo', /IMG_7657/i.test(heroSrc));
+  }
   const availability = $('#heroAvailability');
   const total = activeProducts().reduce((sum, product) => sum + product.stock, 0);
   if (availability) availability.textContent = total > 0 ? 'Pièces en stock' : 'En rupture';
@@ -331,20 +370,19 @@ function renderChrome() {
     $('#footerMail').textContent = settings.email || '—';
     $('#footerMail').href = 'mailto:' + (settings.email || '');
   }
-  if ($('#footerAddress')) $('#footerAddress').textContent = settings.address || '—';
+
+  const storeItems = STORES.map((store) =>
+    '<div class="contact-item store-item"><svg class="icon"><use href="#i-map"></use></svg><div><small>Magasin</small>' +
+    '<a href="' + mapsUrl(store.query) + '" target="_blank" rel="noopener noreferrer">' + esc(store.label) + '</a></div></div>'
+  ).join('');
 
   if ($('#contactList')) {
     $('#contactList').innerHTML =
       '<div class="contact-item"><svg class="icon"><use href="#i-instagram"></use></svg><div><small>Instagram</small><a href="' + instagramUrl() + '" target="_blank" rel="noopener">' + esc(handle) + '</a></div></div>' +
       (settings.phone ? '<div class="contact-item"><svg class="icon"><use href="#i-phone"></use></svg><div><small>Téléphone</small><a href="' + phoneUrl() + '">' + esc(settings.phone) + '</a></div></div>' : '') +
       '<div class="contact-item"><svg class="icon"><use href="#i-mail"></use></svg><div><small>Email</small><a href="mailto:' + esc(settings.email || '') + '">' + esc(settings.email || '—') + '</a></div></div>' +
-      '<div class="contact-item"><svg class="icon"><use href="#i-map"></use></svg><div><small>Atelier</small><span>' + esc(settings.address || '—') + '</span></div></div>' +
-      '<div class="contact-item"><svg class="icon"><use href="#i-clock"></use></svg><div><small>Horaires</small><span>Lundi – Samedi · 9h – 19h</span></div></div>';
-  }
-
-  if ($('#storyImage') && state.products.length) {
-    const pick = state.products.find((product) => product.categoryId === 'cat_robes') || state.products[0];
-    $('#storyImage').src = (pick.images && pick.images[0]) || IMG_LOGO_FULL;
+      storeItems +
+      '<div class="contact-item"><svg class="icon"><use href="#i-clock"></use></svg><div><small>Horaires</small><span>' + esc(OPENING_HOURS) + '</span></div></div>';
   }
 
   if ($('#editorialMain')) {
@@ -385,7 +423,7 @@ function productCard(product) {
   if (promo) badges.push('<span class="badge promo">-' + promo + '%</span>');
   if (product.featured) badges.push('<span class="badge featured">Signature</span>');
 
-  return '<article class="product-card">' +
+  return '<article class="product-card" data-quick-view="' + esc(product.id) + '">' +
     '<div class="product-media">' +
       '<a href="' + productUrl(product) + '" aria-label="Voir ' + esc(product.name) + '">' +
         '<img class="product-img" src="' + esc(product.images[0] || IMG_LOGO_FULL) + '" alt="' + esc(product.name) + '" loading="lazy">' +
@@ -395,7 +433,6 @@ function productCard(product) {
       '<button class="wish-btn' + (favorited ? ' active' : '') + '" data-wish="' + esc(product.id) + '" aria-label="' + (favorited ? 'Retirer des favoris' : 'Ajouter aux favoris') + '">' +
         '<svg class="icon"><use href="#i-heart"></use></svg>' +
       '</button>' +
-      '<a class="product-quick" href="' + productUrl(product) + '">Découvrir la pièce</a>' +
     '</div>' +
     '<div class="product-body">' +
       '<div class="product-cat">' + esc(category ? category.name : '') + '</div>' +
@@ -560,10 +597,10 @@ function renderFilters() {
     '</div>';
 }
 
-function renderShop() {
+function renderShop(animate = false) {
   const category = state.categories.find((entry) => entry.slug === state.filters.cat);
   $('#shopTitle').textContent = category ? category.name : 'La boutique';
-  $('#shopSubtitle').textContent = category ? category.description : 'Toutes les pièces de la maison, réunies avec soin.';
+  $('#shopSubtitle').textContent = category ? category.description : 'Toutes les pièces Diamond Luxury, réunies avec soin.';
   $('#shopSort').value = state.filters.sort;
   renderFilters();
 
@@ -572,6 +609,25 @@ function renderShop() {
   $('#shopGrid').innerHTML = list.length
     ? productGrid(list)
     : emptyState('Aucun article trouvé', 'Essayez d’élargir vos filtres ou de parcourir une autre catégorie.', 'Réinitialiser les filtres', '#/boutique');
+
+  if (animate) animateShopEntry();
+}
+
+function animateShopEntry() {
+  [$('#shopTitle'), $('#shopSubtitle')].forEach((element, index) => {
+    if (!element) return;
+    element.classList.remove('shop-enter');
+    void element.offsetWidth;
+    element.style.animationDelay = (index * 60) + 'ms';
+    element.classList.add('shop-enter');
+  });
+
+  $$('#shopGrid .product-card').forEach((card, index) => {
+    card.classList.remove('shop-card-enter');
+    void card.offsetWidth;
+    card.style.animationDelay = (Math.min(index, 12) * 55) + 'ms';
+    card.classList.add('shop-card-enter');
+  });
 }
 
 function resetFilters() {
@@ -579,7 +635,7 @@ function resetFilters() {
   if (location.hash !== '#/boutique') {
     location.hash = '#/boutique';
   } else {
-    renderShop();
+    renderShop(true);
   }
 }
 
@@ -657,7 +713,7 @@ function renderProduct(slug) {
             '<span class="qty-num" id="qtyNum">1</span>' +
             '<button class="qty-btn" data-qty="plus" aria-label="Augmenter la quantité"><svg class="icon sm"><use href="#i-plus"></use></svg></button>' +
           '</div>' +
-          '<button class="btn btn-gold" id="addToCart">Ajouter au panier</button>' +
+          '<button class="btn btn-gold add-cart" id="addToCart">' + addCartInner('Ajouter au panier') + '</button>' +
         '</div>' +
         '<div class="product-actions">' +
           '<button class="icon-action' + (state.wishlist.includes(product.id) ? ' active' : '') + '" data-wish="' + esc(product.id) + '" aria-label="Ajouter aux favoris"><svg class="icon"><use href="#i-heart"></use></svg></button>' +
@@ -675,7 +731,7 @@ function renderProduct(slug) {
           '</div>' +
           '<div class="accordion-item">' +
             '<button class="accordion-head">Livraison & paiement <svg class="icon"><use href="#i-chevron"></use></svg></button>' +
-            '<div class="accordion-body"><ul><li>Livraison dans les 58 wilayas sous 2 à 5 jours ouvrés.</li><li>Paiement à la livraison, après vérification de votre pièce.</li><li>Frais calculés selon votre wilaya et le mode choisi (domicile ou stop-desk)' + (state.settings.freeShippingFrom > 0 ? ' — offerts dès ' + formatPrice(state.settings.freeShippingFrom) + ' d’achat.' : '.') + '</li></ul></div>' +
+            '<div class="accordion-body"><ul><li>Livraison dans les 58 wilayas sous 2 à 5 jours ouvrés.</li><li>Paiement à la livraison, après vérification de votre pièce.</li><li>Frais calculés selon votre wilaya et le mode choisi (domicile ou bureau)' + (state.settings.freeShippingFrom > 0 ? ' — offerts dès ' + formatPrice(state.settings.freeShippingFrom) + ' d’achat.' : '.') + '</li></ul></div>' +
           '</div>' +
           '<div class="accordion-item">' +
             '<button class="accordion-head">Échanges & retours <svg class="icon"><use href="#i-chevron"></use></svg></button>' +
@@ -740,8 +796,8 @@ function bindProduct(product) {
   });
 
   $$('#productPage [data-size]').forEach((button) => {
-    if (button.disabled) return;
     button.addEventListener('click', () => {
+      if (button.disabled) return;
       productView.size = button.dataset.size;
       productView.qty = 1;
       $$('#productPage [data-size]').forEach((entry) => entry.classList.toggle('active', entry === button));
@@ -759,7 +815,9 @@ function bindProduct(product) {
   });
 
   $('#addToCart').addEventListener('click', () => {
-    addToCart(product, productView.color, productView.size, productView.qty);
+    const add = $('#addToCart');
+    const done = () => addToCart(product, productView.color, productView.size, productView.qty);
+    if (!playAddToCart(add, done)) done();
   });
 
   $$('#productPage .accordion-head').forEach((head) => {
@@ -808,7 +866,7 @@ function updateVariantUI(product) {
   const add = $('#addToCart');
   if (add) {
     add.disabled = !available;
-    add.textContent = available ? 'Ajouter au panier' : 'En rupture';
+    setAddCartLabel(add, available ? 'Ajouter au panier' : 'En rupture');
   }
   const qty = $('#qtyNum');
   if (qty) qty.textContent = productView.qty;
@@ -819,6 +877,281 @@ function updateVariantUI(product) {
     insta.href = instagramDmUrl();
     insta.dataset.category = category ? category.name : '';
   }
+}
+
+/* ------------------------------ Aperçu rapide (Quick View) ------------------------------ */
+
+function quickViewProduct() {
+  return quickView ? productById(quickView.productId) : null;
+}
+
+function quickViewMarkup(product) {
+  const category = categoryOf(product);
+  const images = product.images || [];
+  const meta = variantMeta(product);
+  const color = quickView.color;
+  const favorited = state.wishlist.includes(product.id);
+
+  const thumbs = images.length > 1
+    ? '<div class="qv-thumbs">' + images.map((image, index) =>
+        '<button type="button" class="qv-thumb' + (index === quickView.image ? ' active' : '') + '" data-qv-image="' + index + '" aria-label="Vue ' + (index + 1) + '">' +
+          '<img src="' + esc(image) + '" alt="" loading="lazy">' +
+        '</button>').join('') + '</div>'
+    : '';
+
+  const arrows = images.length > 1
+    ? '<div class="gallery-nav">' +
+        '<button type="button" data-qv-gallery="prev" aria-label="Image précédente"><svg class="icon"><use href="#i-chevron-left"></use></svg></button>' +
+        '<button type="button" data-qv-gallery="next" aria-label="Image suivante"><svg class="icon"><use href="#i-chevron-right"></use></svg></button>' +
+      '</div>'
+    : '';
+
+  const colorOptions = (product.colors || []).map((tone) => {
+    const available = (product.sizes || []).some((size) => variantStock(product, tone.name, size) > 0);
+    return '<button type="button" class="color-option' + (!available ? ' disabled' : '') + '" data-qv-color="' + esc(tone.name) + '"' + (!available ? ' disabled' : '') + '>' +
+      '<span class="dot" style="background:' + esc(tone.hex) + '"></span>' + esc(tone.name) + '</button>';
+  }).join('');
+
+  const sizeOptions = (product.sizes || []).map((size) => {
+    const stock = variantStock(product, color, size);
+    return '<button type="button" class="size-option' + (stock <= 0 ? ' disabled' : '') + '" data-qv-size="' + esc(size) + '"' + (stock <= 0 ? ' disabled' : '') + '>' + esc(size) + '</button>';
+  }).join('');
+
+  const details = product.details && product.details.length
+    ? product.details
+    : ['Une pièce sélectionnée avec soin par Diamond Luxury.'];
+
+  return '<div class="qv-grid">' +
+    '<div class="qv-gallery">' +
+      '<div class="qv-main">' +
+        '<img id="qvMainImage" src="' + esc(images[0] || IMG_LOGO_FULL) + '" alt="' + esc(product.name) + '">' +
+        arrows +
+      '</div>' +
+      thumbs +
+    '</div>' +
+    '<div class="qv-info">' +
+      '<div class="product-cat">' + esc(category ? category.name : '') + '</div>' +
+      '<h2 class="qv-title" id="qvTitle">' + esc(product.name) + '</h2>' +
+      '<div class="product-price-lg">' +
+        '<span class="price' + (discountPercent(product) ? ' price-promo' : '') + '">' + formatPrice(product.price) + '</span>' +
+        (product.comparePrice > product.price ? '<span class="price-old">' + formatPrice(product.comparePrice) + '</span><span class="badge promo">-' + discountPercent(product) + '%</span>' : '') +
+      '</div>' +
+      '<div class="availability" id="qvAvailability"></div>' +
+      (product.description ? '<p class="product-desc">' + esc(product.description) + '</p>' : '') +
+      '<div class="option-row">' +
+        '<div class="option-label">Couleur <span id="qvColorLabel"></span></div>' +
+        '<div class="color-options" id="qvColorOptions">' + colorOptions + '</div>' +
+      '</div>' +
+      '<div class="option-row">' +
+        '<div class="option-label">' + esc(meta.choose) + ' <span id="qvSizeLabel"></span></div>' +
+        '<div class="size-options" id="qvSizeOptions">' + sizeOptions + '</div>' +
+      '</div>' +
+      '<div class="stock-note" id="qvStockNote"></div>' +
+      '<div class="add-row">' +
+        '<div class="qty">' +
+          '<button type="button" class="qty-btn" data-qv-qty="minus" aria-label="Diminuer la quantité"><svg class="icon sm"><use href="#i-minus"></use></svg></button>' +
+          '<span class="qty-num" id="qvQtyNum">1</span>' +
+          '<button type="button" class="qty-btn" data-qv-qty="plus" aria-label="Augmenter la quantité"><svg class="icon sm"><use href="#i-plus"></use></svg></button>' +
+        '</div>' +
+        '<button type="button" class="btn btn-gold add-cart" id="qvAddToCart">' + addCartInner('Ajouter au panier') + '</button>' +
+      '</div>' +
+      '<div class="product-actions">' +
+        '<button type="button" class="icon-action' + (favorited ? ' active' : '') + '" data-wish="' + esc(product.id) + '" aria-label="' + (favorited ? 'Retirer des favoris' : 'Ajouter aux favoris') + '"><svg class="icon"><use href="#i-heart"></use></svg></button>' +
+        '<a class="btn btn-outline" id="qvInstagram" href="' + instagramDmUrl() + '" target="_blank" rel="noopener"><svg class="icon sm"><use href="#i-instagram"></use></svg> Commander sur Instagram</a>' +
+      '</div>' +
+      '<div class="perks qv-perks">' +
+        '<div class="perk"><svg class="icon"><use href="#i-truck"></use></svg><span><strong>Livraison</strong> — 58 wilayas' + (state.settings.freeShippingFrom > 0 ? ' · offerte dès ' + formatPrice(state.settings.freeShippingFrom) : '') + '</span></div>' +
+        '<div class="perk"><svg class="icon"><use href="#i-shield"></use></svg><span><strong>Paiement à la livraison</strong> — vous vérifiez avant de payer</span></div>' +
+      '</div>' +
+      '<div class="accordion">' +
+        '<div class="accordion-item open">' +
+          '<button type="button" class="accordion-head" aria-expanded="true">Détails de la pièce <svg class="icon"><use href="#i-chevron"></use></svg></button>' +
+          '<div class="accordion-body"><ul>' + details.map((line) => '<li>' + esc(line) + '</li>').join('') + '</ul></div>' +
+        '</div>' +
+        '<div class="accordion-item">' +
+          '<button type="button" class="accordion-head" aria-expanded="false">Livraison & paiement <svg class="icon"><use href="#i-chevron"></use></svg></button>' +
+          '<div class="accordion-body"><ul><li>Livraison dans les 58 wilayas sous 2 à 5 jours ouvrés.</li><li>Paiement à la livraison, après vérification de votre pièce.</li><li>Frais calculés selon votre wilaya et le mode choisi (domicile ou bureau)' + (state.settings.freeShippingFrom > 0 ? ' — offerts dès ' + formatPrice(state.settings.freeShippingFrom) + ' d’achat.' : '.') + '</li></ul></div>' +
+        '</div>' +
+        '<div class="accordion-item">' +
+          '<button type="button" class="accordion-head" aria-expanded="false">Échanges & retours <svg class="icon"><use href="#i-chevron"></use></svg></button>' +
+          '<div class="accordion-body"><ul><li>Échange possible sous 48 h, article non porté et dans son emballage.</li><li>Contactez-nous sur Instagram pour organiser un retour.</li><li>Les bijoux et parfums ne peuvent pas être échangés pour des raisons d’hygiène.</li></ul></div>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+function openQuickView(idOrSlug) {
+  const product = productById(idOrSlug) || state.products.find((entry) => entry.slug === idOrSlug);
+  if (!product || !product.active) return;
+
+  closeSearch();
+  closeSideDrawer();
+  closeCart();
+  $('#shopFilters').classList.remove('open');
+
+  const wasOpen = $('#quickViewOverlay').classList.contains('open');
+  const initial = firstAvailableVariant(product);
+  quickView = {
+    productId: product.id,
+    color: initial ? initial.color : (product.colors[0] ? product.colors[0].name : 'Unique'),
+    size: initial ? initial.size : (product.sizes[0] || 'Taille unique'),
+    qty: 1,
+    image: 0
+  };
+  if (!wasOpen) quickViewTrigger = document.activeElement;
+
+  $('#quickViewContent').innerHTML = quickViewMarkup(product);
+  bindQuickView(product);
+  updateQuickViewUI(product);
+  $('#quickViewOverlay').classList.add('open');
+  $('#quickViewOverlay').setAttribute('aria-hidden', 'false');
+  syncBodyLock();
+  setTimeout(() => {
+    const close = $('#quickViewClose');
+    if (close && $('#quickViewOverlay').classList.contains('open')) close.focus();
+  }, 60);
+}
+
+function closeQuickView() {
+  const overlay = $('#quickViewOverlay');
+  if (!overlay.classList.contains('open')) return;
+  overlay.classList.remove('open');
+  overlay.setAttribute('aria-hidden', 'true');
+  syncBodyLock();
+  const trigger = quickViewTrigger;
+  quickView = null;
+  quickViewTrigger = null;
+  setTimeout(() => {
+    const content = $('#quickViewContent');
+    if (content && !overlay.classList.contains('open')) content.innerHTML = '';
+  }, 280);
+  if (trigger && trigger.isConnected) setTimeout(() => trigger.focus({ preventScroll: true }), 80);
+}
+
+function setQuickViewImage(index) {
+  const product = quickViewProduct();
+  if (!product || !quickView) return;
+  const images = product.images || [];
+  if (!images.length) return;
+  quickView.image = (index + images.length) % images.length;
+  const main = $('#qvMainImage');
+  if (main) main.src = images[quickView.image];
+  $$('#quickViewContent [data-qv-image]').forEach((thumb) => {
+    thumb.classList.toggle('active', Number(thumb.dataset.qvImage) === quickView.image);
+  });
+}
+
+function bindQuickView(product) {
+  $$('#quickViewContent [data-qv-image]').forEach((thumb) => {
+    thumb.addEventListener('click', () => setQuickViewImage(Number(thumb.dataset.qvImage)));
+  });
+
+  $$('#quickViewContent [data-qv-gallery]').forEach((button) => {
+    button.addEventListener('click', () => {
+      if (!quickView) return;
+      setQuickViewImage(quickView.image + (button.dataset.qvGallery === 'next' ? 1 : -1));
+    });
+  });
+
+  $$('#quickViewContent [data-qv-color]').forEach((button) => {
+    if (button.disabled) return;
+    button.addEventListener('click', () => {
+      if (!quickView) return;
+      const tone = button.dataset.qvColor;
+      quickView.color = tone;
+      const available = (product.sizes || []).find((size) => variantStock(product, tone, size) > 0);
+      if (!available) quickView.size = product.sizes[0];
+      else if (variantStock(product, tone, quickView.size) <= 0) quickView.size = available;
+      quickView.qty = 1;
+      updateQuickViewUI(product);
+    });
+  });
+
+  $$('#quickViewContent [data-qv-size]').forEach((button) => {
+    button.addEventListener('click', () => {
+      if (!quickView || button.disabled) return;
+      quickView.size = button.dataset.qvSize;
+      quickView.qty = 1;
+      updateQuickViewUI(product);
+    });
+  });
+
+  $$('#quickViewContent [data-qv-qty]').forEach((button) => {
+    button.addEventListener('click', () => {
+      if (!quickView) return;
+      const stock = variantStock(product, quickView.color, quickView.size);
+      const delta = button.dataset.qvQty === 'plus' ? 1 : -1;
+      quickView.qty = Math.max(1, Math.min(stock || 1, quickView.qty + delta));
+      $('#qvQtyNum').textContent = quickView.qty;
+    });
+  });
+
+  const add = $('#qvAddToCart');
+  if (add) {
+    add.addEventListener('click', () => {
+      if (!quickView) return;
+      const { color, size, qty } = quickView;
+      if (variantStock(product, color, size) <= 0) return;
+      const done = () => {
+        closeQuickView();
+        addToCart(product, color, size, qty);
+      };
+      if (!playAddToCart(add, done)) done();
+    });
+  }
+
+  $$('#quickViewContent .accordion-head').forEach((head) => {
+    head.addEventListener('click', () => {
+      const item = head.parentElement;
+      item.classList.toggle('open');
+      head.setAttribute('aria-expanded', item.classList.contains('open') ? 'true' : 'false');
+    });
+  });
+}
+
+function updateQuickViewUI(product) {
+  if (!quickView) return;
+  const { color, size } = quickView;
+  const stock = variantStock(product, color, size);
+  const available = stock > 0;
+
+  $$('#quickViewContent [data-qv-color]').forEach((button) => button.classList.toggle('active', button.dataset.qvColor === color));
+  $$('#quickViewContent [data-qv-size]').forEach((button) => {
+    const buttonStock = variantStock(product, color, button.dataset.qvSize);
+    button.classList.toggle('disabled', buttonStock <= 0);
+    button.disabled = buttonStock <= 0;
+    button.classList.toggle('active', button.dataset.qvSize === size);
+  });
+
+  const colorLabel = $('#qvColorLabel');
+  if (colorLabel) colorLabel.textContent = color;
+  const sizeLabel = $('#qvSizeLabel');
+  if (sizeLabel) sizeLabel.textContent = size;
+
+  const availability = $('#qvAvailability');
+  if (availability) {
+    availability.className = 'availability' + (!available ? ' out' : '');
+    availability.textContent = available ? 'En stock — prêt à être expédié' : 'En rupture';
+  }
+
+  const note = $('#qvStockNote');
+  if (note) {
+    note.className = 'stock-note' + (!available ? ' out' : '');
+    note.textContent = available ? '' : 'En rupture. Choisissez une autre couleur ou ' + variantMeta(product).lower + '.';
+  }
+
+  const add = $('#qvAddToCart');
+  if (add) {
+    add.disabled = !available;
+    setAddCartLabel(add, available ? 'Ajouter au panier' : 'En rupture');
+  }
+
+  const qty = $('#qvQtyNum');
+  if (qty) qty.textContent = quickView.qty;
+
+  const insta = $('#qvInstagram');
+  if (insta) insta.href = instagramDmUrl();
 }
 
 /* ------------------------------ Favoris ------------------------------ */
@@ -861,6 +1194,50 @@ function cartLines() {
 
 function cartSubtotal() {
   return cartLines().reduce((sum, line) => sum + line.product.price * line.qty, 0);
+}
+
+/* ------------------------------ Animation « Ajouter au panier » ------------------------------ */
+
+function addCartInner(label) {
+  return '<span class="ac-label">' + esc(label) + '</span>' +
+    '<span class="ac-cart" aria-hidden="true">' +
+      '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.8 4h2.3l2.3 10.3h9.9l2-7.1H7.2"/><circle cx="9.6" cy="19" r="1.4"/><circle cx="17" cy="19" r="1.4"/></svg>' +
+      '<span class="ac-dot"></span>' +
+    '</span>' +
+    '<span class="ac-check" aria-hidden="true">' +
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.6l4.4 4.4L19 6.6"/></svg>' +
+    '</span>';
+}
+
+function setAddCartLabel(button, label) {
+  if (!button) return;
+  const node = $('.ac-label', button);
+  if (node) node.textContent = label;
+  else button.textContent = label;
+}
+
+function playAddToCart(button, onDone) {
+  if (!button || button.disabled) return false;
+  if (button.dataset.busy === 'true') return true;
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
+
+  button.dataset.busy = 'true';
+  button.setAttribute('aria-busy', 'true');
+  button.classList.remove('is-success');
+  button.classList.add('is-adding');
+
+  window.setTimeout(() => {
+    button.classList.remove('is-adding');
+    button.classList.add('is-success');
+    window.setTimeout(() => {
+      button.classList.remove('is-success');
+      delete button.dataset.busy;
+      button.removeAttribute('aria-busy');
+      if (typeof onDone === 'function') onDone();
+    }, 1400);
+  }, 1200);
+
+  return true;
 }
 
 function addToCart(product, color, size, qty) {
@@ -982,7 +1359,11 @@ async function openCheckout() {
     communeId: '',
     mode: 'domicile',
     stopdeskId: '',
+    stopdesk: null,
     quote: null,
+    homeQuote: null,
+    stopQuote: null,
+    promo: null,
     stopdesks: []
   };
 
@@ -1001,19 +1382,43 @@ async function openCheckout() {
         '<div class="field"><label for="oWilaya">Wilaya *</label><select id="oWilaya" name="wilaya" required>' + wilayaOptions + '</select></div>' +
         '<div class="field"><label for="oCommune">Commune *</label><select id="oCommune" name="commune" required disabled><option value="">Choisissez la wilaya d’abord</option></select></div>' +
         '<div class="field full"><label>Mode de livraison *</label>' +
-          '<div class="delivery-modes" id="deliveryModes">' +
-            '<button type="button" class="delivery-mode active" data-mode="domicile"><svg class="icon sm"><use href="#i-truck"></use></svg> Livraison à domicile</button>' +
-            '<button type="button" class="delivery-mode" data-mode="stopdesk"><svg class="icon sm"><use href="#i-map"></use></svg> Retrait en stop-desk</button>' +
+          '<div class="delivery-modes" id="deliveryModes" role="radiogroup" aria-label="Mode de livraison">' +
+            '<div class="delivery-card" data-mode-card="stopdesk">' +
+              '<button type="button" class="delivery-mode" data-mode="stopdesk" role="radio" aria-checked="false">' +
+                '<span class="mode-icon"><svg class="icon sm"><use href="#i-map"></use></svg></span>' +
+                '<span class="mode-text"><strong>Livraison au bureau</strong><small>Retrait dans un point relais</small></span>' +
+                '<span class="mode-radio" aria-hidden="true"></span>' +
+              '</button>' +
+              '<div class="stopdesk-panel" id="stopdeskPanel" hidden>' +
+                '<div class="stopdesk-list" id="stopdeskList" role="radiogroup" aria-label="Bureaux de livraison"></div>' +
+                '<span class="field-hint" id="stopdeskHint"></span>' +
+              '</div>' +
+            '</div>' +
+            '<div class="delivery-card active" data-mode-card="domicile">' +
+              '<button type="button" class="delivery-mode active" data-mode="domicile" role="radio" aria-checked="true">' +
+                '<span class="mode-icon"><svg class="icon sm"><use href="#i-truck"></use></svg></span>' +
+                '<span class="mode-text"><strong>Livraison à domicile</strong><small>Chez vous, à l’adresse indiquée</small></span>' +
+                '<span class="mode-price" id="homePrice"></span>' +
+                '<span class="mode-radio" aria-hidden="true"></span>' +
+              '</button>' +
+            '</div>' +
           '</div>' +
         '</div>' +
         '<div class="field full" id="addressField"><label for="oAddress">Adresse *</label><input id="oAddress" name="address" autocomplete="street-address" placeholder="Cité, rue, numéro, repère…"></div>' +
-        '<div class="field full" id="stopdeskField" hidden><label for="oStopdesk">Bureau stop-desk *</label><select id="oStopdesk" disabled><option value="">Choisissez une commune</option></select><span class="field-hint" id="stopdeskHint"></span></div>' +
         '<div class="field full"><label for="oNotes">Note (facultatif)</label><textarea id="oNotes" name="notes" rows="2" placeholder="Repère, préférence de livraison…"></textarea></div>' +
+        '<div class="field full promo-field"><label for="oPromo">Code promo (facultatif)</label>' +
+          '<div class="promo-input">' +
+            '<input id="oPromo" name="promo" autocomplete="off" spellcheck="false" placeholder="EX. DIAMOND10" maxlength="30">' +
+            '<button type="button" class="btn btn-outline" id="applyPromo">Appliquer</button>' +
+          '</div>' +
+          '<span class="field-hint" id="promoHint"></span>' +
+        '</div>' +
       '</div>' +
       '<div class="checkout-summary">' +
         lines.map((line) =>
           '<div class="summary-row"><span>' + esc(line.product.name) + ' × ' + line.qty + ' <small style="color:var(--muted)">(' + esc(line.color) + ' · ' + esc(variantMeta(line.product).label) + ' ' + esc(line.size) + ')</small></span><span>' + formatPrice(line.product.price * line.qty) + '</span></div>'
         ).join('') +
+        '<div class="summary-row promo-summary" id="promoSummary" hidden><span>Réduction <small id="promoLabel"></small></span><span id="promoAmount"></span></div>' +
         '<div class="summary-row"><span>Livraison</span><span id="checkoutDelivery">Choisissez votre commune</span></div>' +
         '<div class="summary-row total"><span>Total</span><span id="checkoutTotal">' + formatPrice(subtotal) + '</span></div>' +
       '</div>' +
@@ -1027,9 +1432,10 @@ async function openCheckout() {
   const form = $('#checkoutForm');
   const wilayaSelect = $('#oWilaya');
   const communeSelect = $('#oCommune');
-  const stopdeskField = $('#stopdeskField');
-  const stopdeskSelect = $('#oStopdesk');
+  const stopdeskPanel = $('#stopdeskPanel');
+  const stopdeskList = $('#stopdeskList');
   const stopdeskHint = $('#stopdeskHint');
+  const homePrice = $('#homePrice');
   const addressField = $('#addressField');
   const addressInput = $('#oAddress');
   const phoneInput = $('#oPhone');
@@ -1039,6 +1445,12 @@ async function openCheckout() {
   const shippingSource = $('#shippingSource');
   const submit = $('#checkoutSubmit');
   const errorBox = $('#checkoutError');
+  const promoInput = $('#oPromo');
+  const promoApply = $('#applyPromo');
+  const promoHint = $('#promoHint');
+  const promoSummary = $('#promoSummary');
+  const promoLabel = $('#promoLabel');
+  const promoAmount = $('#promoAmount');
 
   const validPhone = (value) => /^0[567]\d{8}$/.test(digits(value));
 
@@ -1068,36 +1480,191 @@ async function openCheckout() {
 
   phoneInput.addEventListener('input', setPhoneHint);
 
+  function quoteText(quote) {
+    if (!quote) return '';
+    return quote.price === 0 ? 'Offerte' : formatPrice(quote.price);
+  }
+
+  function promoDiscount() {
+    if (!draft.promo) return 0;
+    return Math.round(subtotal * (Number(draft.promo.percent) || 0) / 100);
+  }
+
   function updateTotal() {
     const delivery = draft.quote ? draft.quote.price : null;
-    totalLabel.textContent = formatPrice(subtotal + (delivery || 0));
+    const discount = promoDiscount();
+    totalLabel.textContent = formatPrice(Math.max(0, subtotal - discount) + (delivery || 0));
+    if (draft.promo && discount > 0) {
+      promoSummary.hidden = false;
+      promoLabel.textContent = '(' + draft.promo.code + ' · −' + draft.promo.percent + '%)';
+      promoAmount.textContent = '−' + formatPrice(discount);
+    } else {
+      promoSummary.hidden = true;
+      promoLabel.textContent = '';
+      promoAmount.textContent = '';
+    }
+  }
+
+  async function applyPromo() {
+    const code = promoInput.value.trim().toUpperCase();
+    promoHint.classList.remove('error');
+    if (!code) {
+      draft.promo = null;
+      promoHint.textContent = 'Saisissez un code pour bénéficier de la réduction.';
+      applyQuote();
+      return;
+    }
+    promoApply.disabled = true;
+    promoApply.textContent = 'Vérification…';
+    promoHint.textContent = '';
+    try {
+      const response = await fetch(API_BASE + '/api/promos/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'Vérification impossible.');
+      if (!result.valid) {
+        draft.promo = null;
+        promoHint.textContent = result.error || 'Code promo invalide ou désactivé.';
+        promoHint.classList.add('error');
+      } else {
+        draft.promo = { code: result.code, percent: result.percent };
+        promoHint.textContent = 'Code ' + result.code + ' appliqué : −' + result.percent + '% sur les articles.';
+      }
+      applyQuote();
+    } catch (error) {
+      draft.promo = null;
+      promoHint.textContent = error.message;
+      promoHint.classList.add('error');
+      applyQuote();
+    } finally {
+      promoApply.disabled = false;
+      promoApply.textContent = 'Appliquer';
+    }
+  }
+
+  promoInput.addEventListener('input', () => {
+    promoInput.value = promoInput.value.toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+  });
+  promoInput.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    applyPromo();
+  });
+  promoApply.addEventListener('click', applyPromo);
+
+  function updateStopDeskPrices() {
+    const label = quoteText(draft.stopQuote);
+    $$('.stopdesk-price', stopdeskList).forEach((node) => {
+      node.textContent = '— ' + (label || '…');
+    });
+  }
+
+  function applyQuote() {
+    draft.quote = draft.mode === 'stopdesk' ? draft.stopQuote : draft.homeQuote;
+    const quote = draft.quote;
+
+    if (!draft.wilayaId || !draft.communeId) {
+      deliveryLabel.textContent = draft.wilayaId ? 'Choisissez votre commune' : 'Choisissez votre wilaya';
+      shippingSource.textContent = '';
+    } else if (!quote) {
+      deliveryLabel.textContent = 'Calcul en cours…';
+      shippingSource.textContent = '';
+    } else {
+      deliveryLabel.textContent = quoteText(quote);
+      if (quote.price === 0 && quote.basePrice > 0) {
+        shippingSource.textContent = 'Livraison offerte : votre panier dépasse ' + formatPrice(quote.freeShippingFrom) + '.';
+      } else if (quote.source === 'zimou') {
+        shippingSource.textContent = 'Tarif Zimou Express · ' + (quote.label || (draft.mode === 'stopdesk' ? 'Point relais' : 'Domicile'));
+      } else {
+        shippingSource.textContent = 'Tarif indicatif · Zimou Express sera utilisé dès que la clé API sera configurée.';
+      }
+    }
+
+    homePrice.textContent = quoteText(draft.homeQuote);
+    updateStopDeskPrices();
+    updateTotal();
+
+    const needsOffice = draft.mode === 'stopdesk' && !draft.stopdesk;
+    submit.disabled = !draft.quote || !draft.communeId || needsOffice;
+  }
+
+  function selectStopDesk(index) {
+    const office = draft.stopdesks[index];
+    if (!office) return;
+    draft.stopdesk = office;
+    draft.stopdeskId = office.id != null ? String(office.id) : '';
+    $$('[data-office-index]', stopdeskList).forEach((button) => {
+      const active = Number(button.dataset.officeIndex) === index;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-checked', active ? 'true' : 'false');
+    });
+    applyQuote();
+  }
+
+  function renderStopDesks() {
+    stopdeskList.innerHTML = draft.stopdesks.map((office, index) => {
+      const carrier = carrierOf(office);
+      const selected = draft.stopdesk === office;
+      const priceLabel = quoteText(draft.stopQuote) || '…';
+      return '<button type="button" class="stopdesk-card' + (selected ? ' active' : '') + '" data-office-index="' + index + '" role="radio" aria-checked="' + (selected ? 'true' : 'false') + '">' +
+        '<span class="carrier-logo" style="color:' + carrier.color + ';background:' + carrier.bg + '">' +
+          (carrier.logo
+            ? '<img src="' + esc(carrier.logo) + '" alt="' + esc(carrier.name) + '">'
+            : esc(carrier.initials)) +
+        '</span>' +
+        '<span class="stopdesk-main">' +
+          '<span class="stopdesk-title"><strong>' + esc(carrier.name) + '</strong> <span class="stopdesk-price">— ' + esc(priceLabel) + '</span></span>' +
+          '<span class="stopdesk-address">' + esc(office.address || office.name || '') + '</span>' +
+        '</span>' +
+        '<span class="mode-radio" aria-hidden="true"></span>' +
+      '</button>';
+    }).join('');
+
+    $$('[data-office-index]', stopdeskList).forEach((button) => {
+      button.addEventListener('click', () => selectStopDesk(Number(button.dataset.officeIndex)));
+    });
   }
 
   function setMode(mode) {
     draft.mode = mode;
-    $$('#deliveryModes [data-mode]').forEach((button) => button.classList.toggle('active', button.dataset.mode === mode));
+    $$('#deliveryModes [data-mode]').forEach((button) => {
+      const active = button.dataset.mode === mode;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-checked', active ? 'true' : 'false');
+      const card = button.closest('.delivery-card');
+      if (card) card.classList.toggle('active', active);
+    });
+
     const isStop = mode === 'stopdesk';
     addressField.hidden = isStop;
     addressInput.required = !isStop;
-    stopdeskField.hidden = !isStop;
+    stopdeskPanel.hidden = !isStop || !draft.communeId;
+
     if (isStop) {
       addressInput.value = '';
-      loadStopDesks();
-    } else {
-      draft.stopdeskId = '';
+      if (draft.communeId) loadStopDesks();
     }
-    refreshQuote();
+
+    if (draft.communeId && (!draft.homeQuote || !draft.stopQuote)) refreshQuote();
+    else applyQuote();
   }
 
   async function loadCommunes() {
     draft.wilayaId = wilayaSelect.value;
     draft.communeId = '';
     draft.stopdeskId = '';
+    draft.stopdesk = null;
     draft.quote = null;
+    draft.homeQuote = null;
+    draft.stopQuote = null;
     draft.stopdesks = [];
-    stopdeskSelect.innerHTML = '<option value="">Choisissez une commune</option>';
-    stopdeskSelect.disabled = true;
+    stopdeskList.innerHTML = '';
+    stopdeskPanel.hidden = true;
     stopdeskHint.textContent = '';
+    homePrice.textContent = '';
     deliveryLabel.textContent = 'Choisissez votre commune';
     shippingSource.textContent = '';
     updateTotal();
@@ -1123,69 +1690,67 @@ async function openCheckout() {
 
   async function loadStopDesks() {
     if (!draft.communeId) {
-      stopdeskSelect.innerHTML = '<option value="">Choisissez une commune</option>';
-      stopdeskSelect.disabled = true;
+      stopdeskList.innerHTML = '';
+      stopdeskPanel.hidden = true;
       stopdeskHint.textContent = '';
       return;
     }
-    stopdeskSelect.innerHTML = '<option value="">Chargement des bureaux…</option>';
-    stopdeskSelect.disabled = true;
+
+    stopdeskPanel.hidden = draft.mode !== 'stopdesk';
+    stopdeskList.innerHTML = '<div class="stopdesk-state">Chargement des bureaux…</div>';
     stopdeskHint.textContent = '';
+
     try {
       const result = await shippingStopDesks(draft.communeId);
       draft.stopdesks = result.items || [];
+
       if (!draft.stopdesks.length) {
-        stopdeskSelect.innerHTML = '<option value="">Aucun bureau disponible</option>';
-        stopdeskHint.textContent = 'Aucun bureau n’est disponible pour cette commune. Choisissez la livraison à domicile.';
+        stopdeskList.innerHTML = '<div class="stopdesk-state">Aucun bureau disponible pour cette commune.</div>';
+        stopdeskHint.textContent = 'Choisissez la livraison à domicile pour cette commune.';
         return;
       }
-      stopdeskSelect.innerHTML = '<option value="">Choisir un bureau…</option>' + draft.stopdesks.map((office) =>
-        '<option value="' + (office.id == null ? '' : office.id) + '">' + esc(office.name) + ' — ' + esc(office.address) + '</option>').join('');
-      stopdeskSelect.disabled = false;
-      if (draft.stopdesks.length === 1) {
-        const only = draft.stopdesks[0];
-        stopdeskSelect.value = only.id == null ? '' : String(only.id);
-        draft.stopdeskId = only.id == null ? '' : String(only.id);
-      }
+
+      renderStopDesks();
+      if (draft.stopdesks.length === 1 && !draft.stopdesk) selectStopDesk(0);
+
       if (result.source === 'fallback' && draft.stopdesks[0] && draft.stopdesks[0].fallback) {
         stopdeskHint.textContent = 'Bureau indicatif local — les vrais points relais Zimou apparaîtront dès que la clé API sera configurée.';
       } else if (result.message) {
         stopdeskHint.textContent = result.message;
       }
     } catch (error) {
-      stopdeskSelect.innerHTML = '<option value="">Erreur de chargement</option>';
+      stopdeskList.innerHTML = '<div class="stopdesk-state">Impossible de charger les bureaux.</div>';
       stopdeskHint.textContent = error.message;
     }
   }
 
   async function refreshQuote() {
+    draft.homeQuote = null;
+    draft.stopQuote = null;
     draft.quote = null;
+
     if (!draft.wilayaId || !draft.communeId) {
-      deliveryLabel.textContent = draft.wilayaId ? 'Choisissez votre commune' : 'Choisissez votre wilaya';
-      shippingSource.textContent = '';
-      updateTotal();
-      submit.disabled = true;
+      applyQuote();
       return;
     }
+
     deliveryLabel.textContent = 'Calcul en cours…';
     shippingSource.textContent = '';
     submit.disabled = true;
+
     try {
-      const quote = await shippingQuote(draft.wilayaId, draft.communeId, draft.mode, subtotal);
-      draft.quote = quote;
-      deliveryLabel.textContent = quote.price === 0 ? 'Offerte' : formatPrice(quote.price);
-      if (quote.price === 0 && quote.basePrice > 0) {
-        shippingSource.textContent = 'Livraison offerte : votre panier dépasse ' + formatPrice(quote.freeShippingFrom) + '.';
-      } else if (quote.source === 'zimou') {
-        shippingSource.textContent = 'Tarif Zimou Express · ' + (quote.label || (draft.mode === 'stopdesk' ? 'Point relais' : 'Domicile'));
-      } else {
-        shippingSource.textContent = 'Tarif indicatif · Zimou Express sera utilisé dès que la clé API sera configurée.';
-      }
-      updateTotal();
-      submit.disabled = !draft.quote;
+      const [homeQuote, stopQuote] = await Promise.all([
+        shippingQuote(draft.wilayaId, draft.communeId, 'domicile', subtotal),
+        shippingQuote(draft.wilayaId, draft.communeId, 'stopdesk', subtotal)
+      ]);
+      draft.homeQuote = homeQuote;
+      draft.stopQuote = stopQuote;
+      applyQuote();
     } catch (error) {
       deliveryLabel.textContent = 'Indisponible';
       shippingSource.textContent = error.message;
+      draft.quote = null;
+      homePrice.textContent = '';
       updateTotal();
       submit.disabled = true;
     }
@@ -1195,11 +1760,16 @@ async function openCheckout() {
   communeSelect.addEventListener('change', async () => {
     draft.communeId = communeSelect.value;
     draft.stopdeskId = '';
+    draft.stopdesk = null;
+    draft.stopdesks = [];
+    stopdeskList.innerHTML = '';
+    stopdeskPanel.hidden = draft.mode !== 'stopdesk' || !draft.communeId;
+    if (!draft.communeId) {
+      await refreshQuote();
+      return;
+    }
     if (draft.mode === 'stopdesk') await loadStopDesks();
     await refreshQuote();
-  });
-  stopdeskSelect.addEventListener('change', () => {
-    draft.stopdeskId = stopdeskSelect.value;
   });
   $$('#deliveryModes [data-mode]').forEach((button) => {
     button.addEventListener('click', () => setMode(button.dataset.mode));
@@ -1223,13 +1793,15 @@ async function openCheckout() {
     if (!draft.wilayaId) { showError('Choisissez votre wilaya.'); return; }
     if (!draft.communeId) { showError('Choisissez votre commune.'); return; }
     if (draft.mode === 'domicile' && !address) { showError('Votre adresse est obligatoire pour la livraison à domicile.'); addressInput.focus(); return; }
-    if (draft.mode === 'stopdesk' && !draft.stopdeskId && !draft.stopdesks.length) {
-      showError('Choisissez un bureau stop-desk.');
+    if (draft.mode === 'stopdesk' && !draft.stopdesk) {
+      showError('Choisissez un bureau de livraison.');
       return;
     }
     if (!draft.quote) { showError('Patientez pendant le calcul des frais de livraison.'); return; }
 
-    const stopdeskId = draft.stopdeskId || (draft.stopdesks[0] ? (draft.stopdesks[0].id == null ? '' : String(draft.stopdesks[0].id)) : '');
+    const stopdeskId = draft.mode === 'stopdesk' && draft.stopdesk && draft.stopdesk.id != null
+      ? String(draft.stopdesk.id)
+      : '';
 
     submit.disabled = true;
     submit.textContent = 'Envoi en cours…';
@@ -1248,6 +1820,7 @@ async function openCheckout() {
             notes
           },
           stopdeskId,
+          promoCode: draft.promo ? draft.promo.code : '',
           items: state.cart.map((item) => ({ productId: item.productId, color: item.color, size: item.size, qty: item.qty }))
         })
       });
@@ -1270,7 +1843,8 @@ async function openCheckout() {
             '<div class="order-ref">' + esc(result.ref) + '</div>' +
             '<button type="button" class="btn btn-outline btn-sm" data-copy-ref="' + esc(result.ref) + '"><svg class="icon sm"><use href="#i-copy"></use></svg> Copier la référence</button>' +
           '</div>' +
-          '<div class="summary-row" style="max-width:320px;margin:0 auto 20px"><span>Total à régler</span><span style="font-weight:500;color:var(--ink)">' + formatPrice(result.total) + '</span></div>' +
+          '<div class="summary-row" style="max-width:320px;margin:0 auto 6px"><span>Total à régler</span><span style="font-weight:500;color:var(--ink)">' + formatPrice(result.total) + '</span></div>' +
+          (result.discount > 0 && result.promo ? '<div class="summary-row" style="max-width:320px;margin:0 auto 20px;color:var(--gold-deep)"><span>Code ' + esc(result.promo.code) + ' (−' + result.promo.percent + '%)</span><span>−' + formatPrice(result.discount) + '</span></div>' : '<div style="height:14px"></div>') +
           '<a class="btn btn-gold" href="' + instagramDmUrl() + '" target="_blank" rel="noopener" style="width:100%"><svg class="icon sm"><use href="#i-instagram"></use></svg> CONFIRMER SUR INSTAGRAM</a>' +
           '<p class="wa-note">Le bouton ouvre notre messagerie Instagram @' + esc(handle) + '. Collez-y votre référence de commande. <a href="' + instagramUrl() + '" target="_blank" rel="noopener" style="text-decoration:underline">Voir le profil</a></p>' +
           '<button class="btn btn-outline btn-block" data-close-modal style="margin-top:12px">Continuer mes achats</button>' +
@@ -1309,6 +1883,7 @@ function renderSearch(query) {
 function syncBodyLock() {
   const open = $('#sideDrawer').classList.contains('open') ||
     $('#cartDrawer').classList.contains('open') ||
+    $('#quickViewOverlay').classList.contains('open') ||
     $('#modalOverlay').classList.contains('open') ||
     $('#searchOverlay').classList.contains('open') ||
     $('#shopFilters').classList.contains('open');
@@ -1377,12 +1952,8 @@ function showView(name) {
   const map = { shop: 'boutique', product: 'boutique', home: 'home', about: 'histoire', contact: 'contact', wishlist: 'wishlist' };
   $$('.nav-link').forEach((link) => link.classList.remove('active'));
   const key = map[name];
-  const link = $('.nav-link[data-nav="' + key + '"]');
+  const link = key ? $('.nav-link[data-nav="' + key + '"]') : null;
   if (link) link.classList.add('active');
-  if (name === 'shop' && state.filters.sort === 'new') {
-    const newLink = $('.nav-link[data-nav="new"]');
-    if (newLink) { $('#shopTitle'); }
-  }
 }
 
 function router() {
@@ -1393,6 +1964,7 @@ function router() {
   const name = segments[0] || 'home';
   closeSideDrawer();
   closeCart();
+  closeQuickView();
   closeModal();
   closeSearch();
   $('#shopFilters').classList.remove('open');
@@ -1402,7 +1974,7 @@ function router() {
     state.filters.q = params.get('q') || '';
     state.filters.sort = params.get('sort') || 'new';
     showView('shop');
-    renderShop();
+    renderShop(true);
   } else if (name === 'produit') {
     showView('product');
     renderProduct(decodeURIComponent(segments[1] || ''));
@@ -1419,17 +1991,11 @@ function router() {
   }
 
   $$('.nav-link').forEach((link) => link.classList.remove('active'));
-  if (name === 'boutique' && state.filters.sort === 'new') {
-    const link = $('.nav-link[data-nav="new"]');
-    if (link) link.classList.add('active');
-  } else if (name === 'boutique' || name === 'produit') {
-    const link = $('.nav-link[data-nav="boutique"]');
-    if (link) link.classList.add('active');
-  } else if (name === 'histoire') {
-    const link = $('.nav-link[data-nav="histoire"]');
-    if (link) link.classList.add('active');
-  } else if (name === 'contact') {
-    const link = $('.nav-link[data-nav="contact"]');
+  const navKey = (name === 'boutique' || name === 'produit') ? 'boutique'
+    : name === 'histoire' ? 'histoire'
+      : name === 'contact' ? 'contact' : '';
+  if (navKey) {
+    const link = $('.nav-link[data-nav="' + navKey + '"]');
     if (link) link.classList.add('active');
   }
 
@@ -1496,8 +2062,14 @@ function bindGlobalEvents() {
     if (event.target === $('#modalOverlay')) closeModal();
   });
 
+  $('#quickViewClose').addEventListener('click', closeQuickView);
+  $('#quickViewOverlay').addEventListener('click', (event) => {
+    if (event.target === $('#quickViewOverlay')) closeQuickView();
+  });
+
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
+    if ($('#quickViewOverlay').classList.contains('open')) return closeQuickView();
     if ($('#modalOverlay').classList.contains('open')) return closeModal();
     if ($('#searchOverlay').classList.contains('open')) return closeSearch();
     if ($('#cartDrawer').classList.contains('open')) return closeCart();
@@ -1520,6 +2092,13 @@ function bindGlobalEvents() {
     if (wish) {
       event.preventDefault();
       toggleWishlist(wish.dataset.wish);
+      return;
+    }
+    const quick = event.target.closest('[data-quick-view]');
+    if (quick) {
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+      event.preventDefault();
+      openQuickView(quick.dataset.quickView);
       return;
     }
     if (event.target.closest('[data-go-shop]')) {
@@ -1611,20 +2190,54 @@ function bindGlobalEvents() {
     toast('Merci ! Vous êtes inscrit(e) au cercle privé.');
   });
 
-  $('#contactForm').addEventListener('submit', (event) => {
+  $('#contactForm').addEventListener('submit', async (event) => {
     event.preventDefault();
     const form = event.target;
     const data = new FormData(form);
-    const name = String(data.get('name') || '');
-    const phone = String(data.get('phone') || '');
-    const email = String(data.get('email') || '');
-    const message = String(data.get('message') || '');
-    const text = 'Bonjour Diamond Luxury,\n\n' + message + '\n\n— ' + name + '\nTéléphone : ' + phone + (email ? '\nEmail : ' + email : '');
-    window.open(instagramDmUrl(), '_blank', 'noopener');
-    copyText(text).then((ok) => {
-      toast(ok ? 'Message copié. Collez-le dans votre DM Instagram.' : 'Ouvrez Instagram pour nous envoyer votre message.', ok ? 'success' : 'error');
-    });
-    form.reset();
+    const name = String(data.get('name') || '').trim();
+    const phone = String(data.get('phone') || '').trim();
+    const email = String(data.get('email') || '').trim();
+    const message = String(data.get('message') || '').trim();
+
+    if (!name || !phone || !message) {
+      toast('Merci de renseigner votre nom, votre téléphone et votre message.', 'error');
+      return;
+    }
+
+    const button = form.querySelector('button[type="submit"]');
+    const original = form.dataset.originalHtml || form.innerHTML;
+    form.dataset.originalHtml = original;
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'Envoi en cours…';
+    }
+
+    try {
+      const response = await fetch(API_BASE + '/api/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nom: name, téléphone: phone, email, message })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'Votre message n’a pas pu être envoyé.');
+
+      form.innerHTML =
+        '<div class="success-panel contact-success">' +
+          '<div class="success-icon"><svg class="icon"><use href="#i-check"></use></svg></div>' +
+          '<h3>Merci ' + esc(name.split(' ')[0]) + ' !</h3>' +
+          '<p>Votre message a bien été reçu. Notre équipe vous répondra avec attention dans les plus brefs délais.</p>' +
+          '<button type="button" class="btn btn-outline btn-block" data-contact-reset>Envoyer un autre message</button>' +
+        '</div>';
+      form.querySelector('[data-contact-reset]').addEventListener('click', () => {
+        form.innerHTML = original;
+      });
+    } catch (error) {
+      if (button) {
+        button.disabled = false;
+        button.textContent = 'Envoyer le message';
+      }
+      toast(error.message, 'error');
+    }
   });
 
   const header = $('#siteHeader');

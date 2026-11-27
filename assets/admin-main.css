@@ -438,3 +438,164 @@ input.invalid { border-color: var(--red) !important; background: #fef2f2 !import
   .panel-head h3 { font-size: 20px; }
   .delivery-modes { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ==========================================================================
+   Raffinement, animations et boîte de réception
+   ========================================================================== */
+
+@keyframes dl-section-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes dl-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes dl-shimmer {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(120%); }
+}
+
+.section-anim > * { animation: dl-section-in .42s cubic-bezier(.22,.8,.28,1) both; }
+.section-anim > *:nth-child(2) { animation-delay: 60ms; }
+.section-anim > *:nth-child(3) { animation-delay: 110ms; }
+.section-anim > *:nth-child(4) { animation-delay: 160ms; }
+.section-anim > *:nth-child(n+5) { animation-delay: 200ms; }
+
+.stat-grid .stat-card,
+.data-table tbody tr,
+.message-card,
+.promo-row {
+  animation: dl-rise .45s cubic-bezier(.22,.8,.28,1) both;
+}
+.stat-grid .stat-card:nth-child(1), .data-table tbody tr:nth-child(1), .message-card:nth-child(1), .promo-row:nth-child(1) { animation-delay: 40ms; }
+.stat-grid .stat-card:nth-child(2), .data-table tbody tr:nth-child(2), .message-card:nth-child(2), .promo-row:nth-child(2) { animation-delay: 90ms; }
+.stat-grid .stat-card:nth-child(3), .data-table tbody tr:nth-child(3), .message-card:nth-child(3), .promo-row:nth-child(3) { animation-delay: 140ms; }
+.stat-grid .stat-card:nth-child(4), .data-table tbody tr:nth-child(4), .message-card:nth-child(4), .promo-row:nth-child(4) { animation-delay: 190ms; }
+.data-table tbody tr:nth-child(n+5), .message-card:nth-child(n+5), .promo-row:nth-child(n+5) { animation-delay: 240ms; }
+
+.stat-card, .panel, .form-card, .message-card {
+  transition: transform .28s cubic-bezier(.22,.8,.28,1), box-shadow .28s ease, border-color .28s ease, background-color .28s ease;
+}
+.stat-card:hover, .panel:hover, .form-card:hover, .message-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(201,162,39,.45);
+  box-shadow: 0 2px 4px rgba(26,24,21,.04), 0 16px 36px rgba(138,106,31,.11);
+}
+
+/* Boutons : coins harmonieux, shimmer doré, enfoncement au clic */
+.btn, .filter-tab, .row-btn, .panel-link, .quick-action, .delivery-mode, .promo-toggle {
+  position: relative;
+  overflow: hidden;
+  border-radius: 4px;
+  transition: color .22s ease, background-color .22s ease, border-color .22s ease, box-shadow .22s ease, transform .22s cubic-bezier(.22,.8,.28,1);
+}
+.btn::after, .filter-tab::after, .quick-action::after, .delivery-mode::after, .promo-toggle::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(110deg, transparent 20%, rgba(255,255,255,.28) 48%, rgba(232,205,130,.26) 55%, transparent 82%);
+  transform: translateX(-120%);
+  transition: transform .55s cubic-bezier(.22,.8,.28,1);
+  pointer-events: none;
+}
+.btn:hover::after, .filter-tab:hover::after, .quick-action:hover::after, .delivery-mode:hover::after, .promo-toggle:hover::after,
+.btn:focus-visible::after, .filter-tab:focus-visible::after { transform: translateX(120%); }
+.btn:hover, .filter-tab:hover, .row-btn:hover, .panel-link:hover, .quick-action:hover, .delivery-mode:hover, .promo-toggle:hover {
+  box-shadow: 0 6px 16px rgba(138,106,31,.14);
+}
+.btn:active, .filter-tab:active, .row-btn:active, .panel-link:active, .quick-action:active, .delivery-mode:active, .promo-toggle:active {
+  transform: scale(.97);
+}
+.btn:disabled { transform: none; box-shadow: none; }
+.btn-gold:hover { box-shadow: 0 8px 20px rgba(138,106,31,.28); }
+
+/* Sélecteur de date luxe */
+.dash-date { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dash-date-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--gold-deep);
+  transition: border-color .22s ease, box-shadow .22s ease;
+}
+.dash-date-field:focus-within { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(201,162,39,.12); }
+.dash-date-field .icon { width: 15px; height: 15px; }
+.dash-date-field input[type="date"] {
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: 500 11px/1.2 var(--sans);
+  letter-spacing: .04em;
+  padding: 2px 0;
+  outline: none;
+  color-scheme: light;
+}
+.dash-quick.active { border-color: var(--gold); color: var(--gold-deep); background: #fffdf7; }
+.order-total-row.discount { color: var(--gold-deep); }
+.order-total-row.discount span:last-child { font-weight: 500; }
+
+/* Boîte de réception */
+.message-list { display: grid; gap: 12px; }
+.message-card { background: var(--paper); border: 1px solid var(--line); border-left: 3px solid var(--line); padding: 18px 20px; }
+.message-card.unread { border-left-color: var(--gold); background: #fffdf8; }
+.message-head { display: flex; align-items: center; gap: 12px; }
+.message-avatar {
+  width: 36px; height: 36px; flex: none; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--cream-2); color: var(--gold-deep);
+  font-family: var(--serif); font-size: 18px;
+}
+.message-card.unread .message-avatar { background: rgba(201,162,39,.16); }
+.message-who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.message-who strong { font-size: 13px; font-weight: 500; }
+.message-who small { font-size: 10.5px; color: var(--muted); }
+.message-state { font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--line); border-radius: 99px; padding: 4px 9px; }
+.message-state.new { color: var(--gold-deep); border-color: rgba(201,162,39,.45); background: #fffaf0; }
+.message-contact { display: flex; gap: 16px; flex-wrap: wrap; margin: 12px 0 10px 48px; }
+.message-contact a { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); text-decoration: none; transition: color .2s; }
+.message-contact a:hover { color: var(--gold-deep); }
+.message-contact .icon { width: 12px; height: 12px; }
+.message-body { margin: 0 0 14px 48px; font-size: 12.5px; line-height: 1.7; color: var(--ink-2); white-space: pre-wrap; }
+.message-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-left: 48px; }
+
+/* Codes promo dans les réglages */
+.promo-form-row { display: grid; grid-template-columns: 1fr 116px; gap: 10px; margin-bottom: 10px; }
+.promo-percent-field input { text-align: center; }
+.promo-list { display: grid; gap: 8px; margin-top: 18px; }
+.promo-list .hint { font-size: 11px; color: var(--muted); margin: 0; }
+.promo-row {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--paper); border: 1px solid var(--line); border-radius: 4px; padding: 9px 10px;
+}
+.promo-row.disabled { opacity: .62; background: var(--cream); }
+.promo-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.promo-info strong { font-size: 12px; font-weight: 500; letter-spacing: .06em; }
+.promo-info small { font-size: 10px; color: var(--muted); }
+.promo-toggle {
+  width: 28px; height: 28px; flex: none; border: 1px solid var(--line); background: var(--cream);
+  color: var(--muted); display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.promo-toggle.active { border-color: rgba(47,107,74,.4); background: #eaf4ee; color: var(--green); }
+
+/* Logos locaux */
+.login-logo { width: 72px; height: 72px; object-fit: contain; }
+.sidebar-brand img { width: 44px; height: 44px; object-fit: contain; }
+.hero-preview img { object-fit: contain; }
+
+@media (max-width: 700px) {
+  .dash-date { width: 100%; }
+  .message-contact, .message-body, .message-actions { margin-left: 0; }
+  .promo-form-row { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .section-anim > *, .stat-card, .data-table tbody tr, .message-card, .promo-row { animation: none; }
+  .btn, .filter-tab, .row-btn, .panel-link, .quick-action, .delivery-mode, .promo-toggle { transition: none; }
+  .btn::after, .filter-tab::after, .quick-action::after, .delivery-mode::after, .promo-toggle::after { display: none; }
+}
