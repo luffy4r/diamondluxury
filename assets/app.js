@@ -85,6 +85,7 @@ let productView = null;
 let quickView = null;
 let quickViewTrigger = null;
 let revealObserver = null;
+let smoothTopOnRoute = false;
 
 /* ------------------------------ Utilitaires ------------------------------ */
 
@@ -194,10 +195,15 @@ async function shippingCommunes(wilayaId) {
   return data.communes || [];
 }
 
-async function shippingStopDesks(communeId) {
-  const key = String(communeId);
+async function shippingStopDesks(communeId, wilayaId, subtotal) {
+  const key = [wilayaId, communeId, subtotal].join(':');
   if (state.shipping.stopdesks.has(key)) return state.shipping.stopdesks.get(key);
-  const response = await fetch(API_BASE + '/api/shipping/stopdesks?commune=' + encodeURIComponent(communeId), { headers: { Accept: 'application/json' } });
+  const query = new URLSearchParams({
+    commune: communeId,
+    wilaya: wilayaId || '',
+    subtotal: subtotal || 0
+  });
+  const response = await fetch(API_BASE + '/api/shipping/stopdesks?' + query.toString(), { headers: { Accept: 'application/json' } });
   if (!response.ok) throw new Error('Impossible de charger les bureaux stop-desk.');
   const data = await response.json();
   const payload = { items: data.stopdesks || [], source: data.source, message: data.message || '' };
@@ -205,10 +211,11 @@ async function shippingStopDesks(communeId) {
   return payload;
 }
 
-async function shippingQuote(wilayaId, communeId, mode, subtotal) {
-  const key = [wilayaId, communeId, mode, subtotal].join(':');
+async function shippingQuote(wilayaId, communeId, mode, subtotal, officeId) {
+  const key = [wilayaId, communeId, mode, subtotal, officeId || ''].join(':');
   if (state.shipping.quotes.has(key)) return state.shipping.quotes.get(key);
   const query = new URLSearchParams({ wilaya: wilayaId, commune: communeId, mode, subtotal: subtotal || 0 });
+  if (officeId != null && officeId !== '') query.set('office', officeId);
   const response = await fetch(API_BASE + '/api/shipping/quote?' + query.toString(), { headers: { Accept: 'application/json' } });
   if (!response.ok) throw new Error('Impossible de calculer les frais de livraison.');
   const data = await response.json();
@@ -395,7 +402,7 @@ function updateBadges() {
 
 /* ------------------------------ Cartes produit ------------------------------ */
 
-function productCard(product) {
+function productCard(product, index = 0, reveal = false) {
   const category = categoryOf(product);
   const secondImage = product.images && product.images[1];
   const favorited = state.wishlist.includes(product.id);
@@ -405,7 +412,7 @@ function productCard(product) {
   if (promo) badges.push('<span class="badge promo">-' + promo + '%</span>');
   if (product.featured) badges.push('<span class="badge featured">Signature</span>');
 
-  return '<article class="product-card" data-quick-view="' + esc(product.id) + '">' +
+  return '<article class="product-card' + (reveal ? ' reveal' : '') + '"' + (reveal ? ' style="animation-delay:' + Math.min(index, 3) * 90 + 'ms"' : '') + ' data-quick-view="' + esc(product.id) + '">' +
     '<div class="product-media">' +
       '<a href="' + productUrl(product) + '" aria-label="Voir ' + esc(product.name) + '">' +
         '<img class="product-img" src="' + esc(product.images[0] || IMG_LOGO_FULL) + '" alt="' + esc(product.name) + '" loading="lazy">' +
@@ -427,8 +434,8 @@ function productCard(product) {
   '</article>';
 }
 
-function productGrid(products) {
-  return products.map(productCard).join('');
+function productGrid(products, reveal = false) {
+  return products.map((product, index) => productCard(product, index, reveal)).join('');
 }
 
 /* ------------------------------ Accueil ------------------------------ */
@@ -446,12 +453,12 @@ function renderHome() {
   ).join('');
 
   const newest = [...activeProducts()].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 4);
-  $('#homeProducts').innerHTML = productGrid(newest);
+  $('#homeProducts').innerHTML = productGrid(newest, true);
 
   const featured = activeProducts().filter((product) => product.featured).slice(0, 4);
   const fill = activeProducts().filter((product) => !product.featured).sort((a, b) => b.stock - a.stock);
   const selection = [...featured, ...fill].slice(0, 4);
-  $('#featuredProducts').innerHTML = productGrid(selection);
+  $('#featuredProducts').innerHTML = productGrid(selection, true);
 
   observeReveals();
 }
@@ -1342,7 +1349,8 @@ async function openCheckout() {
     '<p class="modal-sub">Livraison dans les 58 wilayas — paiement à la réception de votre colis.</p>' +
     '<form id="checkoutForm" novalidate>' +
       '<div class="form-grid">' +
-        '<div class="field"><label for="oName">Nom complet *</label><input id="oName" name="name" required autocomplete="name" placeholder="Prénom et nom"></div>' +
+        '<div class="field"><label for="oFirstName">Prénom *</label><input id="oFirstName" name="firstName" required maxlength="60" autocomplete="given-name" placeholder="Votre prénom"></div>' +
+        '<div class="field"><label for="oLastName">Nom *</label><input id="oLastName" name="lastName" required maxlength="60" autocomplete="family-name" placeholder="Votre nom"></div>' +
         '<div class="field"><label for="oPhone">Téléphone *</label><input id="oPhone" name="phone" required inputmode="numeric" maxlength="17" autocomplete="tel" placeholder="05 55 00 00 00"><span class="field-hint" id="phoneHint"></span></div>' +
         '<div class="field"><label for="oWilaya">Wilaya *</label><select id="oWilaya" name="wilaya" required>' + wilayaOptions + '</select></div>' +
         '<div class="field"><label for="oCommune">Commune *</label><select id="oCommune" name="commune" required disabled><option value="">Choisissez la wilaya d’abord</option></select></div>' +
@@ -1395,6 +1403,8 @@ async function openCheckout() {
   );
 
   const form = $('#checkoutForm');
+  const firstNameInput = $('#oFirstName');
+  const lastNameInput = $('#oLastName');
   const wilayaSelect = $('#oWilaya');
   const communeSelect = $('#oCommune');
   const stopdeskPanel = $('#stopdeskPanel');
@@ -1448,6 +1458,14 @@ async function openCheckout() {
   function quoteText(quote) {
     if (!quote) return '';
     return quote.price === 0 ? 'Offerte' : formatPrice(quote.price);
+  }
+
+  function officeDeliveryPrice(office) {
+    if (!office) return null;
+    const freeFrom = Number(state.settings.freeShippingFrom) || 0;
+    if (freeFrom > 0 && subtotal >= freeFrom) return 0;
+    const price = Number(office.price);
+    return Number.isFinite(price) ? price : null;
   }
 
   function promoDiscount() {
@@ -1521,9 +1539,11 @@ async function openCheckout() {
   promoApply.addEventListener('click', applyPromo);
 
   function updateStopDeskPrices() {
-    const label = quoteText(draft.stopQuote);
-    $$('.stopdesk-price', stopdeskList).forEach((node) => {
-      node.textContent = '— ' + (label || '…');
+    $$('[data-office-index]', stopdeskList).forEach((button) => {
+      const office = draft.stopdesks[Number(button.dataset.officeIndex)];
+      const price = officeDeliveryPrice(office);
+      const node = $('.stopdesk-price', button);
+      if (node) node.textContent = '— ' + (price != null ? formatPrice(price) : (quoteText(draft.stopQuote) || '…'));
     });
   }
 
@@ -1556,6 +1576,32 @@ async function openCheckout() {
     submit.disabled = !draft.quote || !draft.communeId || needsOffice;
   }
 
+  let officeQuoteRequest = 0;
+
+  async function refreshSelectedOfficeQuote() {
+    const office = draft.stopdesk;
+    if (draft.mode !== 'stopdesk' || !office) {
+      applyQuote();
+      return;
+    }
+    const requestId = ++officeQuoteRequest;
+    const localPrice = officeDeliveryPrice(office);
+    draft.stopQuote = localPrice != null
+      ? { price: localPrice, source: 'zimou', method: 'stopdesk', label: office.carrier ? 'Point relais · ' + office.carrier : 'Point relais' }
+      : null;
+    applyQuote();
+
+    if (office.id == null) return;
+    try {
+      const quote = await shippingQuote(draft.wilayaId, draft.communeId, 'stopdesk', subtotal, office.id);
+      if (requestId !== officeQuoteRequest) return;
+      draft.stopQuote = quote;
+    } catch {
+      if (requestId !== officeQuoteRequest) return;
+    }
+    applyQuote();
+  }
+
   function selectStopDesk(index) {
     const office = draft.stopdesks[index];
     if (!office) return;
@@ -1566,23 +1612,27 @@ async function openCheckout() {
       button.classList.toggle('active', active);
       button.setAttribute('aria-checked', active ? 'true' : 'false');
     });
-    applyQuote();
+    refreshSelectedOfficeQuote();
   }
 
   function renderStopDesks() {
     stopdeskList.innerHTML = draft.stopdesks.map((office, index) => {
       const carrier = carrierOf(office);
       const selected = draft.stopdesk === office;
-      const priceLabel = quoteText(draft.stopQuote) || '…';
+      const officePrice = officeDeliveryPrice(office);
+      const priceLabel = officePrice != null ? formatPrice(officePrice) : (quoteText(draft.stopQuote) || '…');
+      const logo = office.logo || carrier.logo;
       return '<button type="button" class="stopdesk-card' + (selected ? ' active' : '') + '" data-office-index="' + index + '" role="radio" aria-checked="' + (selected ? 'true' : 'false') + '">' +
         '<span class="carrier-logo" style="color:' + carrier.color + ';background:' + carrier.bg + '">' +
-          (carrier.logo
-            ? '<img src="' + esc(carrier.logo) + '" alt="' + esc(carrier.name) + '">'
+          (logo
+            ? '<img src="' + esc(logo) + '" alt="' + esc(carrier.name) + '">'
             : esc(carrier.initials)) +
         '</span>' +
         '<span class="stopdesk-main">' +
           '<span class="stopdesk-title"><strong>' + esc(carrier.name) + '</strong> <span class="stopdesk-price">— ' + esc(priceLabel) + '</span></span>' +
-          '<span class="stopdesk-address">' + esc(office.address || office.name || '') + '</span>' +
+          '<span class="stopdesk-name">' + esc(office.name || '') + '</span>' +
+          '<span class="stopdesk-address">' + esc(office.address || '') + '</span>' +
+          (office.id != null ? '<span class="stopdesk-id">ID ' + esc(office.id) + '</span>' : '') +
         '</span>' +
         '<span class="mode-radio" aria-hidden="true"></span>' +
       '</button>';
@@ -1664,9 +1714,10 @@ async function openCheckout() {
     stopdeskPanel.hidden = draft.mode !== 'stopdesk';
     stopdeskList.innerHTML = '<div class="stopdesk-state">Chargement des bureaux…</div>';
     stopdeskHint.textContent = '';
+    officeQuoteRequest += 1;
 
     try {
-      const result = await shippingStopDesks(draft.communeId);
+      const result = await shippingStopDesks(draft.communeId, draft.wilayaId, subtotal);
       draft.stopdesks = result.items || [];
 
       if (!draft.stopdesks.length) {
@@ -1677,6 +1728,7 @@ async function openCheckout() {
 
       renderStopDesks();
       if (draft.stopdesks.length === 1 && !draft.stopdesk) selectStopDesk(0);
+      else if (draft.stopdesk) refreshSelectedOfficeQuote();
 
       if (result.source === 'fallback' && draft.stopdesks[0] && draft.stopdesks[0].fallback) {
         stopdeskHint.textContent = 'Bureau indicatif local — les vrais points relais Zimou apparaîtront dès que la clé API sera configurée.';
@@ -1706,7 +1758,7 @@ async function openCheckout() {
     try {
       const [homeQuote, stopQuote] = await Promise.all([
         shippingQuote(draft.wilayaId, draft.communeId, 'domicile', subtotal),
-        shippingQuote(draft.wilayaId, draft.communeId, 'stopdesk', subtotal)
+        shippingQuote(draft.wilayaId, draft.communeId, 'stopdesk', subtotal, draft.stopdesk && draft.stopdesk.id)
       ]);
       draft.homeQuote = homeQuote;
       draft.stopQuote = stopQuote;
@@ -1743,12 +1795,23 @@ async function openCheckout() {
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     hideError();
-    const name = $('#oName').value.trim();
+    const firstName = firstNameInput.value.trim();
+    const lastName = lastNameInput.value.trim();
+    const fullName = [firstName, lastName].filter(Boolean).join(' ');
     const phone = digits(phoneInput.value);
     const address = addressInput.value.trim();
     const notes = $('#oNotes').value.trim();
 
-    if (!name) { showError('Votre nom complet est obligatoire.'); return; }
+    if (!firstName) {
+      showError('Votre prénom est obligatoire.');
+      firstNameInput.focus();
+      return;
+    }
+    if (!lastName) {
+      showError('Votre nom est obligatoire.');
+      lastNameInput.focus();
+      return;
+    }
     if (!validPhone(phone)) {
       setPhoneHint();
       showError('Numéro invalide : il doit commencer par 05, 06 ou 07 et contenir exactement 10 chiffres.');
@@ -1776,7 +1839,10 @@ async function openCheckout() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           customer: {
-            name,
+            firstName,
+            lastName,
+            fullName,
+            name: fullName,
             phone,
             wilayaId: Number(draft.wilayaId),
             communeId: Number(draft.communeId),
@@ -1802,7 +1868,7 @@ async function openCheckout() {
       openModal(
         '<div class="success-panel">' +
           '<div class="success-icon"><svg class="icon"><use href="#i-check"></use></svg></div>' +
-          '<h2>Merci ' + esc(name.split(' ')[0]) + ' !</h2>' +
+          '<h2>Merci ' + esc(firstName) + ' !</h2>' +
           '<p>Votre commande est bien enregistrée. Pour la confirmer, envoyez-nous votre référence en message direct sur Instagram.</p>' +
           '<div class="order-ref-row">' +
             '<div class="order-ref">' + esc(result.ref) + '</div>' +
@@ -1953,6 +2019,7 @@ function router() {
   } else {
     showView('home');
     renderHome();
+    restartHeroAnimation();
   }
 
   $$('.nav-link').forEach((link) => link.classList.remove('active'));
@@ -1964,8 +2031,17 @@ function router() {
     if (link) link.classList.add('active');
   }
 
-  window.scrollTo({ top: 0, behavior: 'auto' });
+  window.scrollTo({ top: 0, behavior: smoothTopOnRoute ? 'smooth' : 'auto' });
+  smoothTopOnRoute = false;
   observeReveals();
+}
+
+function restartHeroAnimation() {
+  const inner = $('#heroInner');
+  if (!inner) return;
+  inner.classList.remove('hero-enter');
+  void inner.offsetWidth;
+  inner.classList.add('hero-enter');
 }
 
 function renderAll() {
@@ -2005,6 +2081,20 @@ function observeReveals() {
 
 function bindGlobalEvents() {
   window.addEventListener('hashchange', router);
+
+  const brand = $('.site-header .brand');
+  if (brand) {
+    brand.addEventListener('click', (event) => {
+      event.preventDefault();
+      const onHome = !location.hash || location.hash === '#/' || location.hash === '#';
+      if (onHome) {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        smoothTopOnRoute = true;
+        location.hash = '#/';
+      }
+    });
+  }
 
   $('#openMenu').addEventListener('click', openSideDrawer);
   $('#closeMenu').addEventListener('click', closeSideDrawer);

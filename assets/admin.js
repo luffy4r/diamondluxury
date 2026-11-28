@@ -59,10 +59,67 @@ function todayKey() {
   return localDateKey(new Date());
 }
 
+function shiftedDateKey(days) {
+  const date = new Date();
+  date.setHours(12, 0, 0, 0);
+  date.setDate(date.getDate() + days);
+  return localDateKey(date);
+}
+
+function weekStartKey() {
+  /* La semaine commence le dimanche (dimanche → samedi). */
+  const date = new Date();
+  date.setHours(12, 0, 0, 0);
+  date.setDate(date.getDate() - date.getDay());
+  return localDateKey(date);
+}
+
+const PERIOD_LABELS = {
+  today: 'Aujourd’hui',
+  yesterday: 'Hier',
+  week: 'Cette semaine',
+  month: 'Ce mois-ci',
+  year: 'Cette année',
+  all: 'Tout',
+  custom: 'Période personnalisée'
+};
+
+function periodBounds() {
+  const today = todayKey();
+  if (admin.period === 'yesterday') return { from: shiftedDateKey(-1), to: shiftedDateKey(-1) };
+  if (admin.period === 'week') return { from: weekStartKey(), to: today };
+  if (admin.period === 'month') return { from: today.slice(0, 7) + '-01', to: today };
+  if (admin.period === 'year') return { from: today.slice(0, 4) + '-01-01', to: today };
+  if (admin.period === 'all') return { from: '', to: '' };
+  if (admin.period === 'custom') return { from: admin.periodFrom || '', to: admin.periodTo || '' };
+  return { from: today, to: today };
+}
+
+function shortPeriodDate(key) {
+  return new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' }).format(new Date(key + 'T12:00:00'));
+}
+
+function periodLabel() {
+  if (admin.period === 'custom') {
+    return 'Du ' + shortPeriodDate(admin.periodFrom) + ' au ' + shortPeriodDate(admin.periodTo);
+  }
+  return PERIOD_LABELS[admin.period] || PERIOD_LABELS.today;
+}
+
+function periodCaption(from, to) {
+  if (!from && !to) return 'Cumul global';
+  if (from === to) {
+    return new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(from + 'T12:00:00'));
+  }
+  return 'Du ' + shortPeriodDate(from) + ' au ' + shortPeriodDate(to);
+}
+
 const admin = {
   data: null,
   section: 'dashboard',
-  dashDate: todayKey(),
+  period: 'today',
+  periodFrom: todayKey(),
+  periodTo: todayKey(),
   productSearch: '',
   productCategory: 'all',
   productStatus: 'all',
@@ -407,21 +464,19 @@ function render() {
 
 /* ------------------------------ Dashboard ------------------------------ */
 
-function renderDashboard() {
+function renderDashboard(animateNumbers = false) {
   const data = admin.data;
   const stats = data.stats;
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Bonjour' : hour < 18 ? 'Bon après-midi' : 'Bonsoir';
-  const today = todayKey();
-  const selectedDate = admin.dashDate === 'all' ? '' : admin.dashDate;
-  const isToday = selectedDate === today;
-  const dateLabel = selectedDate
-    ? new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(selectedDate + 'T12:00:00'))
-    : 'Toutes les dates';
+  const { from, to } = periodBounds();
+  const dateLabel = periodCaption(from, to);
+  const isToday = admin.period === 'today';
 
-  const dayOrders = selectedDate
-    ? data.orders.filter((order) => localDateKey(order.createdAt) === selectedDate)
-    : data.orders;
+  const dayOrders = data.orders.filter((order) => {
+    const key = localDateKey(order.createdAt);
+    return (!from || key >= from) && (!to || key <= to);
+  });
   const validDayOrders = dayOrders.filter((order) => order.status !== 'annulée');
   const revenue = validDayOrders.reduce((sum, order) => sum + order.total, 0);
   const soldItems = validDayOrders.reduce((sum, order) => sum + order.items.reduce((qty, item) => qty + item.qty, 0), 0);
@@ -445,14 +500,26 @@ function renderDashboard() {
   $('#adminContent').innerHTML =
     '<div class="page-greeting">' +
       '<div><h2>' + greeting + ', <em style="font-style:italic;color:var(--gold-deep)">Diamond</em></h2>' +
-      '<p>' + (selectedDate === '' ? 'Vue globale de votre activité.' : isToday ? 'Voici ce qui se passe chez Diamond Luxury aujourd’hui.' : 'Activité du ' + esc(dateLabel) + '.') + '</p></div>' +
-      '<div class="dash-date">' +
-        '<label class="dash-date-field">' +
+      '<p>' + (admin.period === 'all' ? 'Vue globale de votre activité.' : isToday ? 'Voici ce qui se passe chez Diamond Luxury aujourd’hui.' : 'Activité — ' + esc(dateLabel) + '.') + '</p></div>' +
+      '<div class="period-picker" id="periodPicker">' +
+        '<button type="button" class="period-trigger" id="periodTrigger" aria-haspopup="listbox" aria-expanded="false">' +
           '<svg class="icon sm"><use href="#a-calendar"></use></svg>' +
-          '<input type="date" id="dashDate" value="' + esc(selectedDate) + '" aria-label="Choisir une date">' +
-        '</label>' +
-        '<button type="button" class="btn btn-outline btn-sm dash-quick' + (isToday ? ' active' : '') + '" data-dash-date="today">Aujourd’hui</button>' +
-        '<button type="button" class="btn btn-outline btn-sm dash-quick' + (admin.dashDate === 'all' ? ' active' : '') + '" data-dash-date="all">Tout</button>' +
+          '<span id="periodTriggerLabel">' + esc(periodLabel()) + '</span>' +
+          '<svg class="icon sm period-chevron"><use href="#a-chevron"></use></svg>' +
+        '</button>' +
+        '<div class="period-menu" id="periodMenu" role="listbox">' +
+          Object.keys(PERIOD_LABELS).filter((key) => key !== 'custom').map((key) =>
+            '<button type="button" class="period-option' + (admin.period === key ? ' active' : '') + '" data-period="' + key + '" role="option" aria-selected="' + (admin.period === key ? 'true' : 'false') + '">' + PERIOD_LABELS[key] + '</button>'
+          ).join('') +
+          '<div class="period-custom">' +
+            '<button type="button" class="period-custom-title" id="periodCustomFocus">Période personnalisée</button>' +
+            '<div class="period-custom-fields">' +
+              '<label>Du <input type="date" id="periodFrom" value="' + esc(admin.periodFrom) + '"></label>' +
+              '<label>Au <input type="date" id="periodTo" value="' + esc(admin.periodTo) + '"></label>' +
+            '</div>' +
+            '<button type="button" class="btn btn-gold btn-sm btn-block" data-period="custom">Appliquer</button>' +
+          '</div>' +
+        '</div>' +
       '</div>' +
     '</div>' +
 
@@ -465,7 +532,7 @@ function renderDashboard() {
       : '') +
 
     '<div class="stat-grid">' +
-      '<div class="stat-card"><div class="stat-top"><div><div class="stat-label">Chiffre d’affaires</div><div class="stat-value">' + money(revenue) + '</div></div><div class="stat-icon"><svg class="icon"><use href="#a-tag"></use></svg></div></div><div class="stat-foot">' + (selectedDate ? esc(dateLabel) : 'Cumul global') + '</div></div>' +
+      '<div class="stat-card"><div class="stat-top"><div><div class="stat-label">Chiffre d’affaires</div><div class="stat-value">' + money(revenue) + '</div></div><div class="stat-icon"><svg class="icon"><use href="#a-tag"></use></svg></div></div><div class="stat-foot">' + esc(dateLabel) + '</div></div>' +
       '<div class="stat-card"><div class="stat-top"><div><div class="stat-label">Commandes</div><div class="stat-value">' + dayOrders.length + '</div></div><div class="stat-icon"><svg class="icon"><use href="#a-receipt"></use></svg></div></div><div class="stat-foot"><strong>' + dayNewOrders + '</strong> nouvelle' + (dayNewOrders > 1 ? 's' : '') + ' · ' + soldItems + ' article' + (soldItems > 1 ? 's' : '') + ' vendu' + (soldItems > 1 ? 's' : '') + '</div></div>' +
       '<div class="stat-card"><div class="stat-top"><div><div class="stat-label">Articles en ligne</div><div class="stat-value">' + stats.activeProducts + '</div></div><div class="stat-icon"><svg class="icon"><use href="#a-box"></use></svg></div></div><div class="stat-foot">' + stats.products + ' article' + (stats.products > 1 ? 's' : '') + ' au total</div></div>' +
       '<div class="stat-card"><div class="stat-top"><div><div class="stat-label">Ruptures</div><div class="stat-value">' + (stats.outOfStock > 0 ? 'En rupture' : 'Aucune') + '</div></div><div class="stat-icon"><svg class="icon"><use href="#a-diamond"></use></svg></div></div><div class="stat-foot">' + (stats.outOfStock > 0 ? 'Articles à réassortir' : 'Tous les articles sont disponibles') + '</div></div>' +
@@ -474,7 +541,7 @@ function renderDashboard() {
     '<div class="dash-grid">' +
       '<div class="dash-stack">' +
         '<div class="panel">' +
-          '<div class="panel-head"><div><h3>' + (selectedDate ? 'Commandes du jour' : 'Toutes les commandes') + '</h3><div class="panel-sub">' + esc(dateLabel) + '</div></div><button class="panel-link" data-go-orders>Tout voir <svg class="icon sm"><use href="#a-chevron"></use></svg></button></div>' +
+          '<div class="panel-head"><div><h3>' + (admin.period === 'all' ? 'Toutes les commandes' : from === to ? 'Commandes du jour' : 'Commandes de la période') + '</h3><div class="panel-sub">' + esc(dateLabel) + '</div></div><button class="panel-link" data-go-orders>Tout voir <svg class="icon sm"><use href="#a-chevron"></use></svg></button></div>' +
           '<div class="panel-body flush"><div class="table-wrap">' +
             (dayOrders.length
               ? '<table class="data-table"><thead><tr><th>Référence</th><th>Client</th><th>Date</th><th>Total</th><th>Statut</th><th></th></tr></thead><tbody>' +
@@ -486,7 +553,7 @@ function renderDashboard() {
                   '<td>' + statusBadge(order.status) + '</td>' +
                   '<td class="num"><button class="row-btn" data-view-order="' + esc(order.id) + '" aria-label="Voir la commande"><svg class="icon"><use href="#a-eye"></use></svg></button></td></tr>'
                 ).join('') + '</tbody></table>'
-              : '<div class="admin-empty" style="padding:36px"><p style="margin:0">Aucune commande pour cette date.</p></div>') +
+              : '<div class="admin-empty" style="padding:36px"><p style="margin:0">Aucune commande pour cette période.</p></div>') +
           '</div></div>' +
         '</div>' +
 
@@ -526,6 +593,56 @@ function renderDashboard() {
         '</div>' +
       '</div>' +
     '</div>';
+
+  if (animateNumbers) animateKpis();
+}
+
+function animateKpis() {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  $$('#adminContent .stat-value').forEach((element) => {
+    const original = element.textContent.trim();
+    const match = original.match(/(\d[\d\u00a0\u202f,\.]*)/);
+    if (!match) return;
+    const target = Number(match[1].replace(/[^\d]/g, ''));
+    if (!Number.isFinite(target)) return;
+    const isMoney = /\bDA\b/.test(original);
+    const format = (value) => isMoney ? money(value) : new Intl.NumberFormat('fr-FR').format(value);
+    const start = performance.now();
+    const duration = 700;
+    const step = (now) => {
+      const progress = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      element.textContent = format(Math.round(target * eased));
+      if (progress < 1) requestAnimationFrame(step);
+      else element.textContent = original;
+    };
+    requestAnimationFrame(step);
+  });
+}
+
+function setPeriodMenu(open) {
+  const picker = $('#periodPicker');
+  if (!picker) return;
+  picker.classList.toggle('open', open);
+  const trigger = $('#periodTrigger');
+  if (trigger) trigger.setAttribute('aria-expanded', String(open));
+}
+
+function applyPeriod(key) {
+  if (key === 'custom') {
+    const from = $('#periodFrom') ? $('#periodFrom').value : '';
+    const to = $('#periodTo') ? $('#periodTo').value : '';
+    if (!from || !to || from > to) {
+      toast('Choisissez une période valide (du avant au).', 'error');
+      return;
+    }
+    admin.periodFrom = from;
+    admin.periodTo = to;
+  }
+  admin.period = key;
+  setPeriodMenu(false);
+  renderDashboard(true);
+  animateSection();
 }
 
 /* ------------------------------ Produits ------------------------------ */
@@ -1960,7 +2077,13 @@ function bindEvents() {
   $('#closeSidebar').addEventListener('click', closeSidebar);
   $$('#sidebar a.side-link').forEach((link) => link.addEventListener('click', closeSidebar));
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') closeSidebar();
+    if (event.key !== 'Escape') return;
+    closeSidebar();
+    setPeriodMenu(false);
+    if ($('#adminModalOverlay').classList.contains('open')) closeModal();
+  });
+  document.addEventListener('click', (event) => {
+    if (!event.target.closest('#periodPicker')) setPeriodMenu(false);
   });
   window.addEventListener('resize', () => {
     if (window.innerWidth > 1024) closeSidebar();
@@ -2017,12 +2140,14 @@ function bindEvents() {
     if (event.target.closest('[data-go-settings]')) { setSection('settings'); return; }
     if (event.target.closest('[data-go-products]')) { setSection('products'); return; }
 
-    const dashQuick = event.target.closest('[data-dash-date]');
-    if (dashQuick) {
-      admin.dashDate = dashQuick.dataset.dashDate === 'all' ? 'all' : todayKey();
-      renderDashboard();
+    if (event.target.closest('#periodTrigger')) { setPeriodMenu(!$('#periodPicker').classList.contains('open')); return; }
+    if (event.target.closest('#periodCustomFocus')) {
+      const input = $('#periodFrom');
+      if (input) input.focus();
       return;
     }
+    const periodOption = event.target.closest('[data-period]');
+    if (periodOption) { applyPeriod(periodOption.dataset.period); return; }
 
     const messageFilter = event.target.closest('[data-message-filter]');
     if (messageFilter) { admin.messageFilter = messageFilter.dataset.messageFilter; renderMessages(); return; }
@@ -2050,7 +2175,7 @@ function bindEvents() {
     if (removeCategory) { deleteCategory(removeCategory.dataset.deleteCategory); return; }
 
     const orderFilter = event.target.closest('[data-order-filter]');
-    if (orderFilter) { admin.orderFilter = orderFilter.dataset.orderFilter; renderOrders(); return; }
+    if (orderFilter) { admin.orderFilter = orderFilter.dataset.orderFilter; renderOrders(); animateSection(); return; }
 
     const viewOrder = event.target.closest('[data-view-order]');
     if (viewOrder) { openOrderDetail(viewOrder.dataset.viewOrder); return; }
@@ -2070,11 +2195,6 @@ function bindEvents() {
   });
 
   $('#adminContent').addEventListener('change', (event) => {
-    if (event.target.id === 'dashDate') {
-      admin.dashDate = event.target.value || 'all';
-      renderDashboard();
-      return;
-    }
     if (event.target.id === 'productCategoryFilter') {
       admin.productCategory = event.target.value;
       renderProducts();
