@@ -26,14 +26,17 @@ function mapsUrl(query) {
    Pour afficher un vrai logo, renseignez simplement `logo` avec une URL
    (fichier local ou hébergé) : il remplacera les initiales automatiquement. */
 const CARRIER_LOGOS = {
-  yalidine: { match: /yalidine/i, name: 'Yalidine Express', initials: 'YA', logo: '', color: '#0f6b3a', bg: '#e7f3ea' },
-  noest: { match: /noest/i, name: 'Noest Express', initials: 'NO', logo: '', color: '#1d4ed8', bg: '#e8eefc' },
-  zr: { match: /\bzr\b/i, name: 'ZR Express', initials: 'ZR', logo: '', color: '#b45309', bg: '#fdf1e3' },
-  dhd: { match: /\bdhd\b/i, name: 'DHD Express', initials: 'DHD', logo: '', color: '#7c2d12', bg: '#fbeae3' },
-  anderson: { match: /anderson/i, name: 'Anderson Express', initials: 'AN', logo: '', color: '#6d28d9', bg: '#f0e9fd' },
-  zimou: { match: /zimou/i, name: 'Zimou Express', initials: 'ZE', logo: '', color: '#0f766e', bg: '#e6f4f1' },
-  default: { match: null, name: 'Point relais', initials: 'PR', logo: '', color: '#8a6a1f', bg: '#f7f0dc' }
+  yalidine: { match: /yalidine/i, name: 'Yalidine Express', initials: 'YA', logo: 'https://zimou.express/storage/5906/1twbrw8xoMWK1h9sdRhKdI1JQBkBqHpggcOytFDY.svg', color: '#0f6b3a', bg: '#e7f3ea' },
+  noest: { match: /noest/i, name: 'Noest Express', initials: 'NO', logo: 'https://zimou.express/storage/5916/8zd2kfjvZbrvtUYQFUBpwKPmPK2m0yQvM3ITjYFd.svg', color: '#1d4ed8', bg: '#e8eefc' },
+  zr: { match: /\bzr\b/i, name: 'ZR Express', initials: 'ZR', logo: 'https://zimou.express/storage/5902/0Q2ELStA5D4OdfncOY3zVvPSUijoLVknT1eEzyTv.svg', color: '#b45309', bg: '#fdf1e3' },
+  dhd: { match: /\bdhd\b/i, name: 'DHD Express', initials: 'DHD', logo: 'https://zimou.express/storage/5913/3Wztz7vZNPTnXGSZpC4ew6KaHwX82Tmi2OEcahTz.svg', color: '#7c2d12', bg: '#fbeae3' },
+  anderson: { match: /anderson/i, name: 'Anderson Express', initials: 'AN', logo: 'https://zimou.express/storage/5922/401VLgCQ3l7Kw97GnYZTwJlymnm1awY36cOghllI.svg', color: '#6d28d9', bg: '#f0e9fd' },
+  zimou: { match: /zimou/i, name: 'Zimou Express', initials: 'ZE', logo: 'https://zimou.express/storage/5921/kgpDluZg45cjgvWacRcAnV6mEHwgRFG5dmAEB6AB.svg', color: '#0f766e', bg: '#e6f4f1' },
+  default: { match: null, name: 'Point relais', initials: 'PR', logo: 'https://zimou.express/storage/5277/mKNdCFtYI5T9WW60HhrMMr1xDFGVTAkEgjveVwWc.svg', color: '#8a6a1f', bg: '#f7f0dc' }
+maystro: { match: /maystro/i, name: 'Maystro Delivery', initials: 'MA', logo: 'https://zimou.express/storage/5918/vOigAOwX95np3YfAl2KHFZTxV4sgsApjFxyHdo1u.svg' },
+  world: { match: /world/i, name: 'World Express', initials: 'WE', logo: 'https://zimou.express/storage/5919/zzgAcMgTGqN8e6A1g0FVV4rSgTu45rNrS3IzIqCH.svg' },
 };
+
 
 function carrierOf(office) {
   const raw = String((office && (office.carrier || office.provider || office.name)) || '');
