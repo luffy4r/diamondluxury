@@ -1318,6 +1318,715 @@ function renderCart() {
   $('#checkoutBtn').addEventListener('click', openCheckout);
 }
 
+/* ------------------------------ Reçu de commande ------------------------------ */
+
+let activeReceipt = null;
+
+const RECEIPT_LEAD = 'Votre commande est bien enregistrée. Pour la confirmer, envoyez-nous votre référence en message direct sur Instagram, ou attendez que notre équipe vous appelle pour confirmer votre commande.';
+
+function capitalizeFirst(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function formatOrderDate(value) {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return '';
+  try {
+    return new Intl.DateTimeFormat('fr-FR', {
+      day: '2-digit', month: 'long', year: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    }).format(date).replace(':', 'h');
+  } catch {
+    return date.toLocaleString('fr-FR');
+  }
+}
+
+function orderVariantText(item) {
+  return [item && item.color, item && item.size].filter(Boolean).join(' · ');
+}
+
+function orderReceiptData(result) {
+  const receipt = result && result.receipt ? result.receipt : (result || {});
+  return {
+    ref: receipt.ref || (result && result.ref) || '',
+    createdAt: receipt.createdAt || (result && result.createdAt) || new Date().toISOString(),
+    brandName: receipt.brandName || state.settings.brandName || 'Diamond Luxury',
+    instagram: receipt.instagram || state.settings.instagram || 'diamond__luxury_',
+    customer: receipt.customer || {},
+    items: Array.isArray(receipt.items) ? receipt.items : [],
+    shipping: receipt.shipping || {},
+    subtotal: Number(receipt.subtotal) || 0,
+    discount: Number(receipt.discount) || 0,
+    promo: receipt.promo || null,
+    delivery: Number(receipt.delivery) || 0,
+    total: Number(receipt.total) || 0
+  };
+}
+
+function buildReceiptHtml(result) {
+  const data = orderReceiptData(result);
+  const firstName = capitalizeFirst(data.customer.firstName || data.customer.fullName);
+  const dateText = formatOrderDate(data.createdAt);
+  const shipping = data.shipping;
+  const office = shipping.stopdesk || null;
+  const isStop = shipping.mode === 'stopdesk';
+  const modeLabel = isStop ? 'Livraison au bureau' : 'Livraison à domicile';
+  const deliveryText = data.delivery > 0 ? formatPrice(data.delivery) : 'Offerte';
+
+  const itemRows = data.items.map((item) => {
+    const variant = orderVariantText(item);
+    const lineTotal = item.lineTotal != null ? item.lineTotal : (Number(item.price) || 0) * (Number(item.qty) || 1);
+    return '<li class="receipt-item">' +
+      '<div class="receipt-item-main">' +
+        '<span class="receipt-item-name">' + esc(item.name) + '</span>' +
+        (variant ? '<span class="receipt-item-variant">' + esc(variant) + '</span>' : '') +
+      '</div>' +
+      '<span class="receipt-item-qty">×' + (Number(item.qty) || 1) + '</span>' +
+      '<span class="receipt-item-price">' + formatPrice(lineTotal) + '</span>' +
+    '</li>';
+  }).join('');
+
+  const shippingLines = [
+    ['Mode', modeLabel]
+  ];
+  if (isStop) {
+    if (office && office.carrier) shippingLines.push(['Transporteur', office.carrier]);
+    if (office && office.name) shippingLines.push(['Bureau', office.name]);
+    if (office && office.address) shippingLines.push(['Adresse du bureau', office.address]);
+  } else if (shipping.address) {
+    shippingLines.push(['Adresse', shipping.address]);
+  }
+  if (shipping.wilayaName) shippingLines.push(['Wilaya', shipping.wilayaName]);
+  if (shipping.communeName) shippingLines.push(['Commune', shipping.communeName]);
+  shippingLines.push(['Frais de livraison', deliveryText]);
+
+  const promoBlock = data.promo && data.discount > 0
+    ? '<section class="receipt-block receipt-promo">' +
+        '<h3>Remise promo</h3>' +
+        '<div class="receipt-line"><span>Code <strong>' + esc(data.promo.code) + '</strong> (−' + (Number(data.promo.percent) || 0) + '%)</span><span>−' + formatPrice(data.discount) + '</span></div>' +
+      '</section>'
+    : '';
+
+  const handle = data.instagram;
+  const instagramHref = 'https://ig.me/m/' + encodeURIComponent(handle);
+  const downloadIcon = '<svg class="icon sm" viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/></svg>';
+
+  return '<div class="receipt" id="orderReceipt">' +
+    '<div class="receipt-paper">' +
+      '<header class="receipt-head">' +
+        '<div class="receipt-logo"><img src="' + IMG_LOGO_FULL + '" alt="' + esc(data.brandName) + '"></div>' +
+        '<p class="receipt-kicker">Diamond Luxury</p>' +
+        '<p class="receipt-date">' + esc(dateText) + '</p>' +
+      '</header>' +
+
+      '<div class="receipt-seal" aria-hidden="true">' +
+        '<svg viewBox="0 0 64 64">' +
+          '<circle class="receipt-seal-ring" cx="32" cy="32" r="29"></circle>' +
+          '<path class="receipt-seal-check" d="M19 33.5l8.5 8.5L45.5 22"></path>' +
+        '</svg>' +
+      '</div>' +
+
+      '<h2 class="receipt-title">Merci <em>' + esc(firstName) + '</em> !</h2>' +
+      '<p class="receipt-lead">' + esc(RECEIPT_LEAD) + '</p>' +
+
+      '<ol class="receipt-tracker" aria-label="Suivi de la commande">' +
+        '<li class="is-active is-done">' +
+          '<span class="receipt-step-dot">1</span>' +
+          '<span class="receipt-step-label">Enregistrée <svg class="icon receipt-step-check" viewBox="0 0 24 24"><use href="#i-check"></use></svg></span>' +
+        '</li>' +
+        '<li><span class="receipt-step-dot">2</span><span class="receipt-step-label">Confirmation</span></li>' +
+        '<li><span class="receipt-step-dot">3</span><span class="receipt-step-label">Expédition</span></li>' +
+      '</ol>' +
+
+      '<div class="receipt-refbox">' +
+        '<span class="receipt-ref-label">Référence de commande</span>' +
+        '<strong class="receipt-ref">' + esc(data.ref) + '</strong>' +
+        '<button type="button" class="btn btn-outline btn-sm receipt-copy" data-receipt-copy="' + esc(data.ref) + '">' +
+          '<svg class="icon sm"><use href="#i-copy"></use></svg><span>Copier la référence</span>' +
+        '</button>' +
+      '</div>' +
+
+      '<section class="receipt-block">' +
+        '<h3>Articles commandés</h3>' +
+        '<ul class="receipt-items">' + itemRows + '</ul>' +
+      '</section>' +
+
+      '<section class="receipt-block">' +
+        '<h3>Livraison</h3>' +
+        '<div class="receipt-lines">' +
+          shippingLines.map((line) =>
+            '<div class="receipt-line"><span>' + esc(line[0]) + '</span><span>' + esc(line[1]) + '</span></div>'
+          ).join('') +
+        '</div>' +
+      '</section>' +
+
+      promoBlock +
+
+      '<div class="receipt-totals">' +
+        '<div class="receipt-line"><span>Sous-total</span><span>' + formatPrice(data.subtotal) + '</span></div>' +
+        '<div class="receipt-line"><span>Livraison</span><span>' + deliveryText + '</span></div>' +
+        (promoBlock ? '<div class="receipt-line"><span>Remise ' + esc(data.promo.code) + '</span><span>−' + formatPrice(data.discount) + '</span></div>' : '') +
+        '<div class="receipt-net">' +
+          '<div class="receipt-net-label">Total net à régler</div>' +
+          '<div class="receipt-net-value">' + formatPrice(data.total) + '</div>' +
+          '<div class="receipt-net-note">Paiement à la livraison</div>' +
+        '</div>' +
+      '</div>' +
+
+      '<div class="receipt-actions">' +
+        '<a class="btn btn-gold btn-block" href="' + instagramHref + '" target="_blank" rel="noopener" data-instagram-confirm="' + esc(data.ref) + '">' +
+          '<svg class="icon sm"><use href="#i-instagram"></use></svg> CONFIRMER SUR INSTAGRAM' +
+        '</a>' +
+        '<button type="button" class="btn btn-outline btn-block" data-receipt-download>' + downloadIcon + ' Télécharger mon reçu</button>' +
+        '<button type="button" class="btn btn-block receipt-continue" data-close-modal>Continuer mes achats</button>' +
+      '</div>' +
+      '<p class="receipt-foot">Merci pour votre confiance · @' + esc(handle) + '</p>' +
+    '</div>' +
+  '</div>';
+}
+
+function buildReceiptSkeletonHtml() {
+  return '<div class="receipt-paper receipt-skeleton" role="status" aria-live="polite">' +
+    '<div class="sk-logo sk-shimmer"></div>' +
+    '<div class="sk-line sk-shimmer sk-kicker"></div>' +
+    '<div class="sk-line sk-shimmer sk-date"></div>' +
+    '<div class="sk-seal sk-shimmer"></div>' +
+    '<div class="sk-line sk-shimmer sk-title"></div>' +
+    '<div class="sk-line sk-shimmer sk-lead"></div>' +
+    '<div class="sk-line sk-shimmer sk-lead sk-lead-short"></div>' +
+    '<div class="sk-tracker">' +
+      '<span class="sk-step sk-shimmer"></span>' +
+      '<span class="sk-step sk-shimmer"></span>' +
+      '<span class="sk-step sk-shimmer"></span>' +
+    '</div>' +
+    '<div class="sk-refbox">' +
+      '<div class="sk-line sk-shimmer sk-ref"></div>' +
+      '<div class="sk-line sk-shimmer sk-refbtn"></div>' +
+    '</div>' +
+    '<div class="sk-section">' +
+      '<div class="sk-line sk-shimmer sk-heading"></div>' +
+      '<div class="sk-line sk-shimmer sk-item"></div>' +
+      '<div class="sk-line sk-shimmer sk-item sk-item-short"></div>' +
+    '</div>' +
+    '<div class="sk-section">' +
+      '<div class="sk-line sk-shimmer sk-heading"></div>' +
+      '<div class="sk-line sk-shimmer sk-item"></div>' +
+      '<div class="sk-line sk-shimmer sk-item sk-item-short"></div>' +
+    '</div>' +
+    '<div class="sk-total sk-shimmer"></div>' +
+    '<p class="sk-caption">Enregistrement de votre commande…</p>' +
+  '</div>';
+}
+
+function showOrderReceipt(result) {
+  activeReceipt = orderReceiptData(result);
+  const content = $('#modalContent');
+  const skeleton = content && content.querySelector('.receipt-skeleton');
+  if (skeleton) {
+    skeleton.classList.add('is-leaving');
+    setTimeout(() => {
+      if (content.querySelector('.receipt-skeleton')) openModal(buildReceiptHtml(result));
+    }, 220);
+    return;
+  }
+  openModal(buildReceiptHtml(result));
+}
+
+function truncateCanvasText(ctx, text, maxWidth) {
+  let value = String(text || '');
+  if (ctx.measureText(value).width <= maxWidth) return value;
+  while (value.length > 1 && ctx.measureText(value + '…').width > maxWidth) {
+    value = value.slice(0, -1);
+  }
+  return value + '…';
+}
+
+function wrapCanvasText(ctx, text, maxWidth) {
+  const words = String(text || '').split(/\s+/).filter(Boolean);
+  const lines = [];
+  let line = '';
+  words.forEach((word) => {
+    const candidate = line ? line + ' ' + word : word;
+    if (line && ctx.measureText(candidate).width > maxWidth) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = candidate;
+    }
+  });
+  if (line) lines.push(line);
+  return lines;
+}
+
+function drawCanvasSpacedText(ctx, text, x, y, spacing, align) {
+  const chars = Array.from(String(text || ''));
+  const widths = chars.map((char) => ctx.measureText(char).width);
+  const total = widths.reduce((sum, width) => sum + width, 0) + spacing * Math.max(0, chars.length - 1);
+  let cursor = align === 'center' ? x - total / 2 : x;
+  const previousAlign = ctx.textAlign;
+  ctx.textAlign = 'left';
+  chars.forEach((char, index) => {
+    ctx.fillText(char, cursor, y);
+    cursor += widths[index] + spacing;
+  });
+  ctx.textAlign = previousAlign;
+}
+
+function loadReceiptLogo() {
+  return new Promise((resolve) => {
+    const image = new Image();
+    let settled = false;
+    const done = (value) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+    image.onload = () => done(image);
+    image.onerror = () => done(null);
+    image.src = IMG_LOGO_FULL;
+    setTimeout(() => done(image.complete && image.naturalWidth ? image : null), 2500);
+  });
+}
+
+function renderReceiptCanvas(data, logo) {
+  const scale = 2;
+  const W = 760;
+  const M = 54;
+  const contentW = W - M * 2;
+  const serif = '"Didot", "Bodoni 72", "Playfair Display", Georgia, "Times New Roman", serif';
+  const sans = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif';
+  const gold = '#c9a227';
+  const goldDeep = '#8a6a1f';
+  const goldSoft = '#e8cd82';
+  const ink = '#1a1815';
+  const muted = '#7a7268';
+  const line = '#e3d6b8';
+
+  const measure = document.createElement('canvas').getContext('2d');
+  measure.font = '14px ' + sans;
+  const leadLines = wrapCanvasText(measure, RECEIPT_LEAD, contentW - 40);
+
+  const shipping = data.shipping || {};
+  const office = shipping.stopdesk || null;
+  const isStop = shipping.mode === 'stopdesk';
+  const modeLabel = isStop ? 'Livraison au bureau' : 'Livraison à domicile';
+  const deliveryText = data.delivery > 0 ? formatPrice(data.delivery) : 'Offerte';
+  const shippingLines = [['Mode', modeLabel]];
+  if (isStop) {
+    if (office && office.carrier) shippingLines.push(['Transporteur', office.carrier]);
+    if (office && office.name) shippingLines.push(['Bureau', office.name]);
+    if (office && office.address) shippingLines.push(['Adresse du bureau', office.address]);
+  } else if (shipping.address) {
+    shippingLines.push(['Adresse', shipping.address]);
+  }
+  if (shipping.wilayaName) shippingLines.push(['Wilaya', shipping.wilayaName]);
+  if (shipping.communeName) shippingLines.push(['Commune', shipping.communeName]);
+  shippingLines.push(['Frais de livraison', deliveryText]);
+
+  const items = data.items.map((item) => ({
+    name: item.name || '',
+    variant: orderVariantText(item),
+    qty: Number(item.qty) || 1,
+    lineTotal: item.lineTotal != null ? item.lineTotal : (Number(item.price) || 0) * (Number(item.qty) || 1)
+  }));
+  const itemsHeight = items.reduce((sum, item) => sum + (item.variant ? 48 : 36), 0);
+  const promoBlock = data.promo && data.discount > 0;
+
+  let y = 54;
+  const logoTop = y; y += 84 + 24;
+  const kickerY = y; y += 20;
+  const dateY = y; y += 28;
+  const dividerY = y; y += 32;
+  const sealCy = y + 28; y += 56 + 22;
+  const titleY = y + 32; y += 48;
+  const leadTop = y + 14; y += leadLines.length * 22 + 16;
+  const trackerTop = y; y += 52 + 22;
+  const refTop = y; y += 86 + 30;
+  const itemsTitleY = y + 10; y += 28;
+  const itemsTop = y; y += itemsHeight + 12;
+  const shipDividerY = y + 4; y += 28;
+  const shipTitleY = y + 10; y += 26;
+  const shipTop = y; y += shippingLines.length * 24 + 10;
+  let promoDividerY = 0;
+  let promoTitleY = 0;
+  let promoLineY = 0;
+  if (promoBlock) {
+    promoDividerY = y + 4; y += 28;
+    promoTitleY = y + 10; y += 24;
+    promoLineY = y + 10; y += 24;
+  }
+  const totalsDividerY = y + 10; y += 26;
+  const subtotalY = y + 12; y += 25;
+  const deliveryY = y + 12; y += 25;
+  let discountY = 0;
+  if (promoBlock) { discountY = y + 12; y += 25; }
+  const netTop = y + 10;
+  const netH = 86;
+  y = netTop + netH + 30;
+  const footY = y;
+  const totalH = Math.ceil(y + 42);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(W * scale);
+  canvas.height = Math.round(totalH * scale);
+  const ctx = canvas.getContext('2d');
+  ctx.scale(scale, scale);
+  ctx.textBaseline = 'alphabetic';
+
+  ctx.fillStyle = '#fbf7f0';
+  ctx.fillRect(0, 0, W, totalH);
+  ctx.fillStyle = '#fffdf8';
+  ctx.fillRect(18, 18, W - 36, totalH - 36);
+  ctx.strokeStyle = gold;
+  ctx.lineWidth = 1.4;
+  ctx.strokeRect(26.5, 26.5, W - 53, totalH - 53);
+  ctx.strokeStyle = 'rgba(201,162,39,.45)';
+  ctx.lineWidth = 0.8;
+  ctx.strokeRect(33.5, 33.5, W - 67, totalH - 67);
+
+  const drawCorner = (cx, cy) => {
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - 3.4);
+    ctx.lineTo(cx + 3.4, cy);
+    ctx.lineTo(cx, cy + 3.4);
+    ctx.lineTo(cx - 3.4, cy);
+    ctx.closePath();
+    ctx.fillStyle = gold;
+    ctx.fill();
+  };
+  drawCorner(33.5, 33.5);
+  drawCorner(W - 33.5, 33.5);
+  drawCorner(33.5, totalH - 33.5);
+  drawCorner(W - 33.5, totalH - 33.5);
+
+  const logoSize = 84;
+  if (logo && logo.naturalWidth) {
+    const ratio = Math.min(logoSize / logo.naturalWidth, logoSize / logo.naturalHeight);
+    const width = logo.naturalWidth * ratio;
+    const height = logo.naturalHeight * ratio;
+    ctx.drawImage(logo, W / 2 - width / 2, logoTop + (logoSize - height) / 2, width, height);
+  } else {
+    ctx.strokeStyle = gold;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(W / 2, logoTop + 12);
+    ctx.lineTo(W / 2 + 24, logoTop + 32);
+    ctx.lineTo(W / 2, logoTop + 72);
+    ctx.lineTo(W / 2 - 24, logoTop + 32);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.font = '18px ' + serif;
+    ctx.fillStyle = goldDeep;
+    ctx.textAlign = 'center';
+    ctx.fillText('DL', W / 2, logoTop + 52);
+  }
+
+  ctx.textAlign = 'center';
+  ctx.font = '600 10.5px ' + sans;
+  ctx.fillStyle = goldDeep;
+  drawCanvasSpacedText(ctx, 'DIAMOND LUXURY', W / 2, kickerY, 2.6, 'center');
+  ctx.font = '13px ' + sans;
+  ctx.fillStyle = muted;
+  ctx.fillText(formatOrderDate(data.createdAt), W / 2, dateY);
+
+  ctx.strokeStyle = 'rgba(201,162,39,.5)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(M + 30, dividerY);
+  ctx.lineTo(W - M - 30, dividerY);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(W / 2, sealCy, 28, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(201,162,39,.09)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(201,162,39,.55)';
+  ctx.lineWidth = 1.3;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(W / 2 - 13, sealCy + 1.5);
+  ctx.lineTo(W / 2 - 4.5, sealCy + 10);
+  ctx.lineTo(W / 2 + 14, sealCy - 9);
+  ctx.strokeStyle = goldDeep;
+  ctx.lineWidth = 2.6;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+
+  const firstName = capitalizeFirst(data.customer.firstName || data.customer.fullName);
+  if (firstName) {
+    const pre = 'Merci ';
+    const post = ' !';
+    ctx.font = '32px ' + serif;
+    const preW = ctx.measureText(pre).width;
+    ctx.font = 'italic 32px ' + serif;
+    const nameW = ctx.measureText(firstName).width;
+    ctx.font = '32px ' + serif;
+    const postW = ctx.measureText(post).width;
+    let cursor = W / 2 - (preW + nameW + postW) / 2;
+    ctx.textAlign = 'left';
+    ctx.font = '32px ' + serif;
+    ctx.fillStyle = ink;
+    ctx.fillText(pre, cursor, titleY);
+    cursor += preW;
+    ctx.font = 'italic 32px ' + serif;
+    ctx.fillStyle = goldDeep;
+    ctx.fillText(firstName, cursor, titleY);
+    cursor += nameW;
+    ctx.font = '32px ' + serif;
+    ctx.fillStyle = ink;
+    ctx.fillText(post, cursor, titleY);
+  } else {
+    ctx.textAlign = 'center';
+    ctx.font = '32px ' + serif;
+    ctx.fillStyle = ink;
+    ctx.fillText('Merci !', W / 2, titleY);
+  }
+
+  ctx.textAlign = 'center';
+  ctx.font = '13.5px ' + sans;
+  ctx.fillStyle = muted;
+  leadLines.forEach((textLine, index) => {
+    ctx.fillText(textLine, W / 2, leadTop + index * 22);
+  });
+
+  const colW = contentW / 3;
+  const labels = ['ENREGISTRÉE ✓', 'CONFIRMATION', 'EXPÉDITION'];
+  for (let index = 0; index < 3; index += 1) {
+    const cx = M + colW * (index + 0.5);
+    if (index < 2) {
+      ctx.strokeStyle = '#e9dfcb';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(cx + 17, trackerTop + 13);
+      ctx.lineTo(cx + colW - 17, trackerTop + 13);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.arc(cx, trackerTop + 13, 13, 0, Math.PI * 2);
+    if (index === 0) {
+      ctx.fillStyle = gold;
+      ctx.fill();
+      ctx.strokeStyle = gold;
+    } else {
+      ctx.fillStyle = '#fffdf8';
+      ctx.fill();
+      ctx.strokeStyle = line;
+    }
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.font = '600 10px ' + sans;
+    ctx.fillStyle = index === 0 ? '#ffffff' : muted;
+    ctx.textAlign = 'center';
+    ctx.fillText(String(index + 1), cx, trackerTop + 17);
+    ctx.font = '600 8.5px ' + sans;
+    ctx.fillStyle = index === 0 ? goldDeep : '#a8a095';
+    drawCanvasSpacedText(ctx, labels[index], cx, trackerTop + 43, 0.7, 'center');
+  }
+
+  const refX = M + 40;
+  const refW = contentW - 80;
+  const refH = 86;
+  ctx.fillStyle = 'rgba(201,162,39,.08)';
+  ctx.fillRect(refX, refTop, refW, refH);
+  ctx.strokeStyle = 'rgba(201,162,39,.45)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(refX + 0.5, refTop + 0.5, refW - 1, refH - 1);
+  ctx.textAlign = 'center';
+  ctx.font = '600 8.5px ' + sans;
+  ctx.fillStyle = muted;
+  drawCanvasSpacedText(ctx, 'RÉFÉRENCE DE COMMANDE', W / 2, refTop + 24, 1.8, 'center');
+  ctx.font = '23px ' + serif;
+  ctx.fillStyle = ink;
+  drawCanvasSpacedText(ctx, data.ref, W / 2, refTop + 58, 2.4, 'center');
+
+  const drawSectionTitle = (text, baselineY, topY) => {
+    ctx.textAlign = 'left';
+    ctx.font = '600 9px ' + sans;
+    ctx.fillStyle = goldDeep;
+    drawCanvasSpacedText(ctx, text, M, baselineY, 1.7, 'left');
+    ctx.strokeStyle = line;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(M, topY);
+    ctx.lineTo(W - M, topY);
+    ctx.stroke();
+  };
+
+  drawSectionTitle('ARTICLES COMMANDÉS', itemsTitleY, itemsTitleY + 8);
+
+  let rowY = itemsTop;
+  items.forEach((item, index) => {
+    const rowH = item.variant ? 48 : 36;
+    ctx.textAlign = 'left';
+    ctx.font = '13px ' + sans;
+    ctx.fillStyle = ink;
+    ctx.fillText(truncateCanvasText(ctx, item.name, contentW - 160), M, rowY + 14);
+    if (item.variant) {
+      ctx.font = '10.5px ' + sans;
+      ctx.fillStyle = muted;
+      ctx.fillText(truncateCanvasText(ctx, item.variant, contentW - 160), M, rowY + 31);
+    }
+    ctx.textAlign = 'right';
+    ctx.font = '11px ' + sans;
+    ctx.fillStyle = muted;
+    ctx.fillText('×' + item.qty, W - M - 92, rowY + 14);
+    ctx.font = '13px ' + sans;
+    ctx.fillStyle = ink;
+    ctx.fillText(formatPrice(item.lineTotal), W - M, rowY + 14);
+    if (index < items.length - 1) {
+      ctx.strokeStyle = '#f0e9dc';
+      ctx.setLineDash([2, 3]);
+      ctx.beginPath();
+      ctx.moveTo(M, rowY + rowH - 5);
+      ctx.lineTo(W - M, rowY + rowH - 5);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    rowY += rowH;
+  });
+
+  drawSectionTitle('LIVRAISON', shipTitleY, shipDividerY);
+
+  shippingLines.forEach((entry, index) => {
+    const lineY = shipTop + index * 24;
+    ctx.textAlign = 'left';
+    ctx.font = '12px ' + sans;
+    ctx.fillStyle = muted;
+    ctx.fillText(entry[0], M, lineY);
+    ctx.textAlign = 'right';
+    ctx.font = '12px ' + sans;
+    ctx.fillStyle = ink;
+    ctx.fillText(truncateCanvasText(ctx, entry[1], contentW * 0.62), W - M, lineY);
+  });
+
+  if (promoBlock) {
+    drawSectionTitle('REMISE PROMO', promoTitleY, promoDividerY);
+    ctx.textAlign = 'left';
+    ctx.font = '12px ' + sans;
+    ctx.fillStyle = muted;
+    ctx.fillText('Code ' + data.promo.code + ' (−' + (Number(data.promo.percent) || 0) + '%)', M, promoLineY);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = goldDeep;
+    ctx.fillText('−' + formatPrice(data.discount), W - M, promoLineY);
+  }
+
+  ctx.strokeStyle = line;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(M, totalsDividerY);
+  ctx.lineTo(W - M, totalsDividerY);
+  ctx.stroke();
+
+  const drawTotalLine = (label, value, lineY, color) => {
+    ctx.textAlign = 'left';
+    ctx.font = '12px ' + sans;
+    ctx.fillStyle = muted;
+    ctx.fillText(label, M, lineY);
+    ctx.textAlign = 'right';
+    ctx.font = '12px ' + sans;
+    ctx.fillStyle = color || ink;
+    ctx.fillText(value, W - M, lineY);
+  };
+  drawTotalLine('Sous-total', formatPrice(data.subtotal), subtotalY);
+  drawTotalLine('Livraison', deliveryText, deliveryY);
+  if (promoBlock) drawTotalLine('Remise ' + data.promo.code, '−' + formatPrice(data.discount), discountY, goldDeep);
+
+  const netX = M + 20;
+  const netW = contentW - 40;
+  ctx.fillStyle = ink;
+  ctx.fillRect(netX, netTop, netW, netH);
+  ctx.strokeStyle = 'rgba(201,162,39,.5)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(netX + 5.5, netTop + 5.5, netW - 11, netH - 11);
+  ctx.textAlign = 'center';
+  ctx.font = '600 8.5px ' + sans;
+  ctx.fillStyle = goldSoft;
+  drawCanvasSpacedText(ctx, 'TOTAL NET À RÉGLER', W / 2, netTop + 24, 2.1, 'center');
+  ctx.font = '28px ' + serif;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(formatPrice(data.total), W / 2, netTop + 56);
+  ctx.font = '600 8.5px ' + sans;
+  ctx.fillStyle = '#cfc6b8';
+  drawCanvasSpacedText(ctx, 'PAIEMENT À LA LIVRAISON', W / 2, netTop + 73, 1.4, 'center');
+
+  ctx.textAlign = 'center';
+  ctx.font = '10px ' + sans;
+  ctx.fillStyle = muted;
+  ctx.fillText('Merci pour votre confiance · @' + data.instagram, W / 2, footY);
+
+  return canvas;
+}
+
+function canvasToBlob(canvas) {
+  return new Promise((resolve, reject) => {
+    if (canvas.toBlob) {
+      canvas.toBlob((blob) => {
+        if (blob) resolve(blob);
+        else reject(new Error('Image indisponible.'));
+      }, 'image/png');
+      return;
+    }
+    try {
+      const dataUrl = canvas.toDataURL('image/png');
+      const binary = atob(dataUrl.split(',')[1]);
+      const bytes = new Uint8Array(binary.length);
+      for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+      resolve(new Blob([bytes], { type: 'image/png' }));
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+async function saveReceiptBlob(blob, filename) {
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (isIOS && typeof File === 'function' && navigator.canShare) {
+    const file = new File([blob], filename, { type: 'image/png' });
+    if (navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: filename });
+        return;
+      } catch (error) {
+        if (error && error.name === 'AbortError') return;
+      }
+    }
+  }
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.rel = 'noopener';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+async function downloadOrderReceipt(button) {
+  const data = activeReceipt;
+  if (!data) return;
+  const original = button.innerHTML;
+  button.disabled = true;
+  button.textContent = 'Préparation de l’image…';
+  try {
+    const logo = await loadReceiptLogo();
+    const canvas = renderReceiptCanvas(data, logo);
+    const blob = await canvasToBlob(canvas);
+    const filename = 'Recu-DiamondLuxury-' + (data.ref || 'commande') + '.png';
+    await saveReceiptBlob(blob, filename);
+    toast('Reçu téléchargé.');
+  } catch (error) {
+    toast('Téléchargement impossible. Réessayez.', 'error');
+  } finally {
+    button.disabled = false;
+    button.innerHTML = original;
+  }
+}
+
 /* ------------------------------ Commande ------------------------------ */
 
 async function openCheckout() {
@@ -1833,8 +2542,7 @@ async function openCheckout() {
       ? String(draft.stopdesk.id)
       : '';
 
-    submit.disabled = true;
-    submit.textContent = 'Envoi en cours…';
+    openModal(buildReceiptSkeletonHtml());
     try {
       const response = await fetch(API_BASE + '/api/orders', {
         method: 'POST',
@@ -1866,27 +2574,10 @@ async function openCheckout() {
       closeCart();
       try { await loadStore(); renderAll(); } catch { /* la commande est enregistrée */ }
 
-      const handle = state.settings.instagram || 'diamond__luxury_';
-      openModal(
-        '<div class="success-panel">' +
-          '<div class="success-icon"><svg class="icon"><use href="#i-check"></use></svg></div>' +
-          '<h2>Merci ' + esc(firstName) + ' !</h2>' +
-          '<p>Votre commande est bien enregistrée. Pour la confirmer, envoyez-nous votre référence en message direct sur Instagram.</p>' +
-          '<div class="order-ref-row">' +
-            '<div class="order-ref">' + esc(result.ref) + '</div>' +
-            '<button type="button" class="btn btn-outline btn-sm" data-copy-ref="' + esc(result.ref) + '"><svg class="icon sm"><use href="#i-copy"></use></svg> Copier la référence</button>' +
-          '</div>' +
-          '<div class="summary-row" style="max-width:320px;margin:0 auto 6px"><span>Total à régler</span><span style="font-weight:500;color:var(--ink)">' + formatPrice(result.total) + '</span></div>' +
-          (result.discount > 0 && result.promo ? '<div class="summary-row" style="max-width:320px;margin:0 auto 20px;color:var(--gold-deep)"><span>Code ' + esc(result.promo.code) + ' (−' + result.promo.percent + '%)</span><span>−' + formatPrice(result.discount) + '</span></div>' : '<div style="height:14px"></div>') +
-          '<a class="btn btn-gold" href="' + instagramDmUrl() + '" target="_blank" rel="noopener" style="width:100%"><svg class="icon sm"><use href="#i-instagram"></use></svg> CONFIRMER SUR INSTAGRAM</a>' +
-          '<p class="wa-note">Le bouton ouvre notre messagerie Instagram @' + esc(handle) + '. Collez-y votre référence de commande. <a href="' + instagramUrl() + '" target="_blank" rel="noopener" style="text-decoration:underline">Voir le profil</a></p>' +
-          '<button class="btn btn-outline btn-block" data-close-modal style="margin-top:12px">Continuer mes achats</button>' +
-        '</div>'
-      );
+      showOrderReceipt(result);
     } catch (error) {
-      showError(error.message);
-      submit.disabled = false;
-      submit.textContent = 'Confirmer la commande';
+      closeModal();
+      toast(error.message || 'La commande n’a pas pu être enregistrée.', 'error');
     }
   });
 }
@@ -1952,6 +2643,7 @@ function closeCart() {
 
 function openModal(html) {
   $('#modalContent').innerHTML = html;
+  $('#modalOverlay').classList.toggle('wide', html.indexOf('receipt-paper') !== -1);
   $('#modalOverlay').classList.add('open');
   syncBodyLock();
   const field = $('#modalContent input, #modalContent textarea');
@@ -1960,6 +2652,7 @@ function openModal(html) {
 
 function closeModal() {
   $('#modalOverlay').classList.remove('open');
+  $('#modalOverlay').classList.remove('wide');
   syncBodyLock();
 }
 
@@ -2138,6 +2831,51 @@ function bindGlobalEvents() {
   });
 
   document.addEventListener('click', (event) => {
+    const instaConfirm = event.target.closest('[data-instagram-confirm]');
+    if (instaConfirm) {
+      event.preventDefault();
+      const ref = instaConfirm.dataset.instagramConfirm || '';
+      const message = 'Bonjour Diamond Luxury, je souhaite confirmer ma commande ' + ref;
+      const url = instaConfirm.getAttribute('href') || instagramDmUrl();
+      let opened = null;
+      try { opened = window.open(url, '_blank'); } catch { opened = null; }
+      if (opened) {
+        try { opened.opener = null; } catch { /* navigation externe */ }
+      } else {
+        window.location.href = url;
+      }
+      copyText(message).then((ok) => {
+        toast(ok ? "Message copié — il ne vous reste qu'à coller sur Instagram" : 'Copie impossible : copiez votre référence manuellement.', ok ? 'success' : 'error');
+      });
+      return;
+    }
+    const receiptCopy = event.target.closest('[data-receipt-copy]');
+    if (receiptCopy) {
+      const value = receiptCopy.dataset.receiptCopy || '';
+      copyText(value).then((ok) => {
+        if (!ok) {
+          toast('Copie impossible : sélectionnez la référence manuellement.', 'error');
+          return;
+        }
+        const label = receiptCopy.querySelector('span') || receiptCopy;
+        if (!receiptCopy.dataset.originalLabel) {
+          receiptCopy.dataset.originalLabel = label.textContent;
+        }
+        label.textContent = '✓ Copié';
+        receiptCopy.classList.add('is-copied');
+        clearTimeout(receiptCopy.copyTimer);
+        receiptCopy.copyTimer = setTimeout(() => {
+          receiptCopy.classList.remove('is-copied');
+          label.textContent = receiptCopy.dataset.originalLabel;
+        }, 2000);
+      });
+      return;
+    }
+    const download = event.target.closest('[data-receipt-download]');
+    if (download) {
+      downloadOrderReceipt(download);
+      return;
+    }
     const copy = event.target.closest('[data-copy-ref]');
     if (copy) {
       copyText(copy.dataset.copyRef).then((ok) => {
