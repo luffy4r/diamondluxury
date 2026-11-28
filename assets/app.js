@@ -1330,7 +1330,7 @@ async function openCheckout() {
   const draft = {
     wilayaId: '',
     communeId: '',
-    mode: 'domicile',
+    mode: '',
     stopdeskId: '',
     stopdesk: null,
     quote: null,
@@ -1368,8 +1368,8 @@ async function openCheckout() {
                 '<span class="field-hint" id="stopdeskHint"></span>' +
               '</div>' +
             '</div>' +
-            '<div class="delivery-card active" data-mode-card="domicile">' +
-              '<button type="button" class="delivery-mode active" data-mode="domicile" role="radio" aria-checked="true">' +
+            '<div class="delivery-card" data-mode-card="domicile">' +
+              '<button type="button" class="delivery-mode" data-mode="domicile" role="radio" aria-checked="false">' +
                 '<span class="mode-icon"><svg class="icon sm"><use href="#i-truck"></use></svg></span>' +
                 '<span class="mode-text"><strong>Livraison à domicile</strong><small>Chez vous, à l’adresse indiquée</small></span>' +
                 '<span class="mode-price" id="homePrice"></span>' +
@@ -1378,7 +1378,7 @@ async function openCheckout() {
             '</div>' +
           '</div>' +
         '</div>' +
-        '<div class="field full" id="addressField"><label for="oAddress">Adresse *</label><input id="oAddress" name="address" autocomplete="street-address" placeholder="Cité, rue, numéro, repère…"></div>' +
+        '<div class="field full" id="addressField" hidden><label for="oAddress">Adresse *</label><input id="oAddress" name="address" autocomplete="street-address" placeholder="Cité, rue, numéro, repère…"></div>' +
         '<div class="field full"><label for="oNotes">Note (facultatif)</label><textarea id="oNotes" name="notes" rows="2" placeholder="Repère, préférence de livraison…"></textarea></div>' +
         '<div class="field full promo-field"><label for="oPromo">Code promo (facultatif)</label>' +
           '<div class="promo-input">' +
@@ -1393,7 +1393,7 @@ async function openCheckout() {
           '<div class="summary-row"><span>' + esc(line.product.name) + ' × ' + line.qty + ' <small style="color:var(--muted)">(' + esc(line.color) + ' · ' + esc(variantMeta(line.product).label) + ' ' + esc(line.size) + ')</small></span><span>' + formatPrice(line.product.price * line.qty) + '</span></div>'
         ).join('') +
         '<div class="summary-row promo-summary" id="promoSummary" hidden><span>Réduction <small id="promoLabel"></small></span><span id="promoAmount"></span></div>' +
-        '<div class="summary-row"><span>Livraison</span><span id="checkoutDelivery">Choisissez votre commune</span></div>' +
+        '<div class="summary-row"><span>Livraison</span><span id="checkoutDelivery">Choisissez un mode de livraison</span></div>' +
         '<div class="summary-row total"><span>Total</span><span id="checkoutTotal">' + formatPrice(subtotal) + '</span></div>' +
       '</div>' +
       '<div class="shipping-source" id="shippingSource"></div>' +
@@ -1549,10 +1549,15 @@ async function openCheckout() {
   }
 
   function applyQuote() {
-    draft.quote = draft.mode === 'stopdesk' ? draft.stopQuote : draft.homeQuote;
+    draft.quote = draft.mode === 'stopdesk'
+      ? draft.stopQuote
+      : draft.mode === 'domicile' ? draft.homeQuote : null;
     const quote = draft.quote;
 
-    if (!draft.wilayaId || !draft.communeId) {
+    if (!draft.mode) {
+      deliveryLabel.textContent = 'Choisissez un mode de livraison';
+      shippingSource.textContent = '';
+    } else if (!draft.wilayaId || !draft.communeId) {
       deliveryLabel.textContent = draft.wilayaId ? 'Choisissez votre commune' : 'Choisissez votre wilaya';
       shippingSource.textContent = '';
     } else if (!quote) {
@@ -1574,7 +1579,7 @@ async function openCheckout() {
     updateTotal();
 
     const needsOffice = draft.mode === 'stopdesk' && !draft.stopdesk;
-    submit.disabled = !draft.quote || !draft.communeId || needsOffice;
+    submit.disabled = !draft.mode || !draft.quote || !draft.communeId || needsOffice;
   }
 
   let officeQuoteRequest = 0;
@@ -1652,15 +1657,14 @@ async function openCheckout() {
       if (card) card.classList.toggle('active', active);
     });
 
+    const isHome = mode === 'domicile';
     const isStop = mode === 'stopdesk';
-    addressField.hidden = isStop;
-    addressInput.required = !isStop;
+    addressField.hidden = !isHome;
+    addressInput.required = isHome;
     stopdeskPanel.hidden = !isStop || !draft.communeId;
 
-    if (isStop) {
-      addressInput.value = '';
-      if (draft.communeId) loadStopDesks();
-    }
+    if (!isHome) addressInput.value = '';
+    if (isStop && draft.communeId) loadStopDesks();
 
     if (draft.communeId && (!draft.homeQuote || !draft.stopQuote)) refreshQuote();
     else applyQuote();
@@ -1720,20 +1724,18 @@ async function openCheckout() {
       draft.stopdesks = result.items || [];
 
       if (!draft.stopdesks.length) {
-        stopdeskList.innerHTML = '<div class="stopdesk-state">Aucun bureau disponible pour cette commune.</div>';
-        stopdeskHint.textContent = 'Choisissez la livraison à domicile pour cette commune.';
+        draft.stopdesk = null;
+        draft.stopdeskId = '';
+        draft.stopQuote = null;
+        stopdeskList.innerHTML = '<div class="stopdesk-state">Aucun bureau dans votre commune</div>';
+        stopdeskHint.textContent = '';
+        applyQuote();
         return;
       }
 
       renderStopDesks();
       if (draft.stopdesks.length === 1 && !draft.stopdesk) selectStopDesk(0);
       else if (draft.stopdesk) refreshSelectedOfficeQuote();
-
-      if (result.source === 'fallback' && draft.stopdesks[0] && draft.stopdesks[0].fallback) {
-        stopdeskHint.textContent = 'Bureau indicatif local — les vrais points relais Zimou apparaîtront dès que la clé API sera configurée.';
-      } else if (result.message) {
-        stopdeskHint.textContent = result.message;
-      }
     } catch (error) {
       stopdeskList.innerHTML = '<div class="stopdesk-state">Impossible de charger les bureaux.</div>';
       stopdeskHint.textContent = error.message;
@@ -1819,6 +1821,7 @@ async function openCheckout() {
     }
     if (!draft.wilayaId) { showError('Choisissez votre wilaya.'); return; }
     if (!draft.communeId) { showError('Choisissez votre commune.'); return; }
+    if (!draft.mode) { showError('Choisissez un mode de livraison.'); return; }
     if (draft.mode === 'domicile' && !address) { showError('Votre adresse est obligatoire pour la livraison à domicile.'); addressInput.focus(); return; }
     if (draft.mode === 'stopdesk' && !draft.stopdesk) {
       showError('Choisissez un bureau de livraison.');
