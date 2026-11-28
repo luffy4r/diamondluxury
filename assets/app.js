@@ -32,7 +32,7 @@ const CARRIER_LOGOS = {
   dhd: { match: /\bdhd\b/i, name: 'DHD Express', initials: 'DHD', logo: 'https://zimou.express/storage/5913/3Wztz7vZNPTnXGSZpC4ew6KaHwX82Tmi2OEcahTz.svg', color: '#7c2d12', bg: '#fbeae3' },
   anderson: { match: /anderson/i, name: 'Anderson Express', initials: 'AN', logo: 'https://zimou.express/storage/5922/401VLgCQ3l7Kw97GnYZTwJlymnm1awY36cOghllI.svg', color: '#6d28d9', bg: '#f0e9fd' },
   zimou: { match: /zimou/i, name: 'Zimou Express', initials: 'ZE', logo: 'https://zimou.express/storage/5921/kgpDluZg45cjgvWacRcAnV6mEHwgRFG5dmAEB6AB.svg', color: '#0f766e', bg: '#e6f4f1' },
-  default: { match: null, name: 'Point relais', initials: 'PR', logo: 'https://zimou.express/storage/5277/mKNdCFtYI5T9WW60HhrMMr1xDFGVTAkEgjveVwWc.svg', color: '#8a6a1f', bg: '#f7f0dc' },
+  default: { match: null, name: 'Partenaire Point Relais', initials: 'PR', logo: 'https://zimou.express/storage/5277/mKNdCFtYI5T9WW60HhrMMr1xDFGVTAkEgjveVwWc.svg', color: '#8a6a1f', bg: '#f7f0dc' },
 maystro: { match: /maystro/i, name: 'Maystro Delivery', initials: 'MA', logo: 'https://zimou.express/storage/5918/vOigAOwX95np3YfAl2KHFZTxV4sgsApjFxyHdo1u.svg' },
   world: { match: /world/i, name: 'World Express', initials: 'WE', logo: 'https://zimou.express/storage/5919/zzgAcMgTGqN8e6A1g0FVV4rSgTu45rNrS3IzIqCH.svg' }
 };
@@ -41,9 +41,7 @@ maystro: { match: /maystro/i, name: 'Maystro Delivery', initials: 'MA', logo: 'h
 function carrierOf(office) {
   const raw = String((office && (office.carrier || office.provider || office.name)) || '');
   const found = Object.values(CARRIER_LOGOS).find((entry) => entry.match && entry.match.test(raw));
-  if (found) return found;
-  const fallbackName = office && office.name ? String(office.name).split('—')[0].trim() : '';
-  return fallbackName ? { ...CARRIER_LOGOS.default, name: fallbackName } : CARRIER_LOGOS.default;
+  return found || CARRIER_LOGOS.default;
 }
 
 function assetUrl(src) {
@@ -1633,9 +1631,7 @@ async function openCheckout() {
         '</span>' +
         '<span class="stopdesk-main">' +
           '<span class="stopdesk-title"><strong>' + esc(carrier.name) + '</strong> <span class="stopdesk-price">— ' + esc(priceLabel) + '</span></span>' +
-          '<span class="stopdesk-name">' + esc(office.name || '') + '</span>' +
           '<span class="stopdesk-address">' + esc(office.address || '') + '</span>' +
-          (office.id != null ? '<span class="stopdesk-id">ID ' + esc(office.id) + '</span>' : '') +
         '</span>' +
         '<span class="mode-radio" aria-hidden="true"></span>' +
       '</button>';

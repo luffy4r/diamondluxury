@@ -532,9 +532,7 @@ input.invalid { border-color: var(--red) !important; background: #fef2f2; }
 .stopdesk-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; font-size: 12px; color: var(--ink); }
 .stopdesk-title strong { font-weight: 600; }
 .stopdesk-price { font-weight: 600; color: var(--gold-deep); white-space: nowrap; }
-.stopdesk-name { font-size: 11.5px; color: var(--ink); font-weight: 500; line-height: 1.4; }
 .stopdesk-address { font-size: 11px; color: var(--muted); line-height: 1.45; }
-.stopdesk-id { font-size: 9.5px; letter-spacing: .1em; color: var(--muted-2); text-transform: uppercase; }
 .stopdesk-state { padding: 16px 12px; border: 1px dashed var(--line); background: var(--paper); font-size: 12px; color: var(--muted); text-align: center; }
 .stopdesk-panel .field-hint { display: block; margin-top: 10px; }
 .checkout-summary { margin: 20px 0; padding: 16px; background: var(--cream); border: 1px solid var(--line); }
